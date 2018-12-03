@@ -163,6 +163,13 @@ class RayletClient {
   ray::Status NotifyActorResumedFromCheckpoint(const ActorID &actor_id,
                                                const ActorCheckpointID &checkpoint_id);
 
+  /// Creates a resource with the specified capacity and client id
+  /// \param object_ids
+  /// \param local_only
+  /// \return
+  ray::Status CreateResource(const std::string &resource_name, const double capacity, const ray::ClientID &client_Id);
+
+
   Language GetLanguage() const { return language_; }
 
   ClientID GetClientID() const { return client_id_; }

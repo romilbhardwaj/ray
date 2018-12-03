@@ -410,6 +410,11 @@ class NodeManager {
   /// \param task The task that just finished.
   void UpdateActorFrontier(const Task &task);
 
+  /// Process client message of CreateResourceRequest
+  /// \param message_data A pointer to the message data.
+  //  /// \return Void.
+  void ProcessCreateResourceRequest(const uint8_t *message_data);
+
   /// Handle the case where an actor is disconnected, determine whether this
   /// actor needs to be reconstructed and then update actor table.
   /// This function needs to be called either when actor process dies or when

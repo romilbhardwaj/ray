@@ -989,6 +989,7 @@ class Worker(object):
 
         return task
 
+
     def main_loop(self):
         """The main loop a worker runs to receive and execute tasks."""
 
@@ -1002,6 +1003,20 @@ class Worker(object):
             task = self._get_next_task_from_local_scheduler()
             self._wait_for_and_process_task(task)
 
+
+def create_resource(resource_name, capacity, clientId=NIL_CLIENT_ID):
+    """
+    Creates a custom resource for a target clientId. If the resource already exists, it's capacity is updated to the new value.
+    If ClientID is not specified or set to NIL_CLIENT_ID, the resource is created on the local client where the actor is running.
+    :param resource_name: Name of the resource to be created
+    :type str
+    :param capacity: Capacity of the new resource.
+    :type float
+    :param clientId:
+    :type ObejctId
+    :return:
+    """
+    return global_worker.raylet_client.create_resource(resource_name, capacity, clientId)
 
 def get_gpu_ids():
     """Get the IDs of the GPUs that are available to the worker.
