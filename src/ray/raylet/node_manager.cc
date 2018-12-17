@@ -1019,6 +1019,33 @@ void NodeManager::ProcessPushErrorRequestMessage(const uint8_t *message_data) {
                                                             timestamp));
 }
 
+
+void NodeManager::ProcessCreateResourceMessage(const uint8_t *message_data) {
+  // Read the CreateResource message
+  auto message = flatbuffers::GetRoot<protocol::CreateResourceRequest>(message_data);
+
+  auto const &resource_name = from_flatbuf(*message->resource_name());
+  int const &capacity = from_flatbuf(*message->capacity());
+  ClientID &client_id = string_from_flatbuf(*message->client_id());
+
+  // If the python arg was null, set client_id to the local client it
+  if (client_id.is_nil()){
+    client_id = gcs_client_->client_table().GetLocalClientId();
+  }
+
+  // Get ClientData to add the new resource to and append again
+  gcs_client_->client_table().GetClient(&client_id, ClientTableDataT const &data)
+
+  // Where is the ClientTableData spec?
+  // TODO(romilb): Add resource here
+
+  // TODO(romilb): what do these parameters mean?
+  RAY_CHECK_OK(gcs_client_->client_table().Append(const JobID &job_id, const ID &id, std::shared_ptr<DataT> &data,
+                       const WriteCallback &done));
+
+  // TODO(romilb): Add call to dispatch
+}
+
 void NodeManager::ProcessPrepareActorCheckpointRequest(
     const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data) {
   auto message =
