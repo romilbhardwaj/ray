@@ -411,9 +411,10 @@ class NodeManager {
   void UpdateActorFrontier(const Task &task);
 
   /// Process client message of CreateResourceRequest
+  /// \param client The client that sent the message.
   /// \param message_data A pointer to the message data.
   //  /// \return Void.
-  void ProcessCreateResourceRequest(const uint8_t *message_data);
+  void ProcessCreateResourceRequest(const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data);
 
   /// Handle the case where an actor is disconnected, determine whether this
   /// actor needs to be reconstructed and then update actor table.

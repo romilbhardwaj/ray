@@ -677,6 +677,9 @@ void NodeManager::ProcessClientMessage(
   case protocol::MessageType::SubmitTask: {
     ProcessSubmitTaskMessage(message_data);
   } break;
+  case protocol::MessageType::CreateResourceRequest: {
+      ProcessCreateResourceRequest(client, message_data);
+  } break;
   case protocol::MessageType::FetchOrReconstruct: {
     ProcessFetchOrReconstructMessage(client, message_data);
   } break;
@@ -1019,33 +1022,6 @@ void NodeManager::ProcessPushErrorRequestMessage(const uint8_t *message_data) {
                                                             timestamp));
 }
 
-
-void NodeManager::ProcessCreateResourceMessage(const uint8_t *message_data) {
-  // Read the CreateResource message
-  auto message = flatbuffers::GetRoot<protocol::CreateResourceRequest>(message_data);
-
-  auto const &resource_name = from_flatbuf(*message->resource_name());
-  int const &capacity = from_flatbuf(*message->capacity());
-  ClientID &client_id = string_from_flatbuf(*message->client_id());
-
-  // If the python arg was null, set client_id to the local client it
-  if (client_id.is_nil()){
-    client_id = gcs_client_->client_table().GetLocalClientId();
-  }
-
-  // Get ClientData to add the new resource to and append again
-  gcs_client_->client_table().GetClient(&client_id, ClientTableDataT const &data)
-
-  // Where is the ClientTableData spec?
-  // TODO(romilb): Add resource here
-
-  // TODO(romilb): what do these parameters mean?
-  RAY_CHECK_OK(gcs_client_->client_table().Append(const JobID &job_id, const ID &id, std::shared_ptr<DataT> &data,
-                       const WriteCallback &done));
-
-  // TODO(romilb): Add call to dispatch
-}
-
 void NodeManager::ProcessPrepareActorCheckpointRequest(
     const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data) {
   auto message =
@@ -1145,7 +1121,7 @@ void NodeManager::ProcessNodeManagerMessage(TcpClientConnection &node_manager_cl
   node_manager_client.ProcessMessages();
 }
 
-void NodeManager::ProcessCreateResourceRequest(const uint8_t *message_data) {
+void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data) {
   // Read the CreateResource message
   auto message = flatbuffers::GetRoot<protocol::CreateResourceRequest>(message_data);
 
@@ -1153,13 +1129,14 @@ void NodeManager::ProcessCreateResourceRequest(const uint8_t *message_data) {
   double const &capacity = *message->capacity();
   ClientID &client_id = string_from_flatbuf(*message->client_id());
 
-  // If the python arg was null, set client_id to the local clien
+  // If the python arg was null, set client_id to the local client
   if (client_id.is_nil()){
     client_id = gcs_client_->client_table().GetLocalClientId();
   }
 
+  ClientTableDataT* data;
   // Get ClientData to add the new resource to and append again
-  gcs_client_->client_table().GetClient(&client_id, ClientTableDataT &data)
+  gcs_client_->client_table().GetClient(client_id, *data);
 
   // If resource exists in the ClientTableData, update it, else create it
   auto existing_resource_label = std::find(data->resources_total_label.begin(), data->resources_total_label.end(), resource_name);
@@ -1174,6 +1151,10 @@ void NodeManager::ProcessCreateResourceRequest(const uint8_t *message_data) {
     data->resources_total_capacity.push_back(capacity)
   }
 
+  std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
+  if (not worker){
+      worker = worker_pool_.GetRegisteredDriver(client);
+  }
   const JobID &job_id = worker->GetAssignedDriverId();
   const UniqueID &rand_id = UniqueID::from_random();
   RAY_CHECK_OK(gcs_client_->client_table().Append(&job_id, rand_id, &data, nullptr));

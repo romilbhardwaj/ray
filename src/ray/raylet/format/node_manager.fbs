@@ -241,11 +241,7 @@ table CreateResourceRequest{
   // Name of the resource to be created
   resource_name: double;
   // Capacity of the resource to be created
-<<<<<<< HEAD
   capacity: double;
-=======
-  capacity: int;        // TODO(romil): Change to double
->>>>>>> Noting changes to make
   // Client ID where this resource will be created
   client_id: string;
 }
