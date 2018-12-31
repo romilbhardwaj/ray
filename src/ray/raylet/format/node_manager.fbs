@@ -239,7 +239,7 @@ table ConnectClient {
 
 table CreateResourceRequest{
   // Name of the resource to be created
-  resource_name: double;
+  resource_name: string;
   // Capacity of the resource to be created
   capacity: double;
   // Client ID where this resource will be created

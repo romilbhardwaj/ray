@@ -1126,15 +1126,15 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
   auto message = flatbuffers::GetRoot<protocol::CreateResourceRequest>(message_data);
 
   auto const &resource_name = string_from_flatbuf(*message->resource_name());
-  double const &capacity = *message->capacity();
-  ClientID &client_id = string_from_flatbuf(*message->client_id());
+  double const &capacity = message->capacity();
+  ClientID client_id = from_flatbuf(*message->client_id());
 
   // If the python arg was null, set client_id to the local client
   if (client_id.is_nil()){
     client_id = gcs_client_->client_table().GetLocalClientId();
   }
 
-  ClientTableDataT* data;
+  ClientTableDataT *data = NULL;
   // Get ClientData to add the new resource to and append again
   gcs_client_->client_table().GetClient(client_id, *data);
 
@@ -1143,12 +1143,12 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
   if ( existing_resource_label != data->resources_total_label.end()){
     // Resource already exists, update capacity
     auto index = std::distance(data->resources_total_label.begin(), existing_resource_label);
-    data->resources_total_capacity[index] = capacity
+    data->resources_total_capacity[index] = capacity;
   }
   else{
     // Resource does not exist, create resource and add capacity.
-    data->resources_total_label.push_back(resource_name)
-    data->resources_total_capacity.push_back(capacity)
+    data->resources_total_label.push_back(resource_name);
+    data->resources_total_capacity.push_back(capacity);
   }
 
   std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
@@ -1157,7 +1157,8 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
   }
   const JobID &job_id = worker->GetAssignedDriverId();
   const UniqueID &rand_id = UniqueID::from_random();
-  RAY_CHECK_OK(gcs_client_->client_table().Append(&job_id, rand_id, &data, nullptr));
+  auto data_shared_ptr = std::make_shared<ClientTableDataT>(*data);
+  RAY_CHECK_OK(gcs_client_->client_table().Append(job_id, rand_id, data_shared_ptr, nullptr));
 }
 
 void NodeManager::ScheduleTasks(

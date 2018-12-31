@@ -1013,7 +1013,6 @@ def create_resource(resource_name, capacity, clientId=NIL_CLIENT_ID):
     :param capacity: Capacity of the new resource.
     :type float
     :param clientId:
-    :type ObejctId
     :return:
     """
     return global_worker.raylet_client.create_resource(resource_name, capacity, clientId)
