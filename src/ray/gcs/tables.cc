@@ -1,5 +1,8 @@
 #include "ray/gcs/tables.h"
 
+#include <fstream>
+#include <iostream>
+
 #include "ray/common/common_protocol.h"
 #include "ray/gcs/client.h"
 #include "ray/ray_config.h"
@@ -299,20 +302,29 @@ void ClientTable::RegisterClientRemovedCallback(const ClientTableCallback &callb
 
 void ClientTable::HandleNotification(AsyncGcsClient *client,
                                      const ClientTableDataT &data) {
+
+  std::ofstream myfile;
+  myfile.open ("/tmp/romilhandlenotif.txt", std::fstream::out | std::fstream::app);
+  myfile << "Start handle.\n";
   ClientID client_id = ClientID::from_binary(data.client_id);
   // It's possible to get duplicate notifications from the client table, so
   // check whether this notification is new.
   auto entry = client_cache_.find(client_id);
   bool is_new;
+  bool is_modified;
   if (entry == client_cache_.end()) {
     // If the entry is not in the cache, then the notification is new.
+    myfile << "Client not in cache\n";
     is_new = true;
   } else {
+    myfile << "Client in cache\n";
     // If the entry is in the cache, then the notification is new if the client
-    // was alive and is now dead.
+    // was alive and is now dead or resources have been updated.
     bool was_inserted = entry->second.is_insertion;
     bool is_deleted = !data.is_insertion;
     is_new = (was_inserted && is_deleted);
+    is_modified = (was_inserted && data.is_insertion);
+    myfile << "Was inserted " << was_inserted << "\n IsDeleted" << is_deleted << "\nis_new: " << is_new << "\nis_modified" << is_modified << "\n";
     // Once a client with a given ID has been removed, it should never be added
     // again. If the entry was in the cache and the client was deleted, check
     // that this new notification is not an insertion.
@@ -320,6 +332,8 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
       RAY_CHECK(!data.is_insertion)
           << "Notification for addition of a client that was already removed:"
           << client_id;
+
+      myfile << "Notification for addition of a client that was already removed:" << client_id;
     }
   }
 
@@ -327,13 +341,17 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
   client_cache_[client_id] = data;
 
   // If the notification is new, call any registered callbacks.
-  if (is_new) {
+  myfile << "Isnew is :" << is_new;
+  if (is_new || is_modified) {
+    myfile << "Isinsertion is :" << data.is_insertion;
     if (data.is_insertion) {
+      myfile << "Calling clientadded";
       if (client_added_callback_ != nullptr) {
         client_added_callback_(client, client_id, data);
       }
       RAY_CHECK(removed_clients_.find(client_id) == removed_clients_.end());
     } else {
+      myfile << "Calling clientremoved";
       // NOTE(swang): The client should be added to this data structure before
       // the callback gets called, in case the callback depends on the data
       // structure getting updated.
@@ -342,6 +360,7 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
         client_removed_callback_(client, client_id, data);
       }
     }
+    myfile.close();
   }
 }
 

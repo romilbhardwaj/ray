@@ -333,8 +333,14 @@ void NodeManager::ClientAdded(const ClientTableDataT &client_data) {
     // cluster_resource_map_[client_id] = initial_config_.resource_config;  //TODO(romilb): Why do we do this?
       ResourceSet resources_total(client_data.resources_total_label,
                                   client_data.resources_total_capacity);
+
+      myfile << "Client_data resources: ";
+      for(auto i : client_data.resources_total_label) {
+          // process i
+          myfile << "RES:" << i << ", ";
+      }
       cluster_resource_map_[client_id] = SchedulingResources(resources_total);
-      myfile << "received a self connection."
+      myfile << "\nreceived a self connection."
                      << client_id
                      << ". Updating resource table.";
     return;
@@ -1234,9 +1240,11 @@ void NodeManager::ProcessDeleteResourceRequest(const std::shared_ptr<LocalClient
     if ( existing_resource_label != data.resources_total_label.end()){
         // Resource exists, delete
         auto index = std::distance(data.resources_total_label.begin(), existing_resource_label);
+        myfile << "Initial size: " << data.resources_total_label.size() << "\n";
         data.resources_total_label.erase(data.resources_total_label.begin()+index);
         data.resources_total_capacity.erase(data.resources_total_capacity.begin()+index);
         myfile << "Resource found, deleted.\n";
+        myfile << "Final size: " << data.resources_total_label.size() << "\n";
     }
     else{
         // Resource does not exist, do nothing

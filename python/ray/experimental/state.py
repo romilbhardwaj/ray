@@ -764,8 +764,10 @@ class GlobalState(object):
         """
         resources = defaultdict(int)
         clients = self.client_table()
+        # TODO(romilb): This needs to be fixed to reflect the correct resource status by picking only the latest
+        # client entry in the log. Currently it includes resources from stale client entries.
         for client in clients:
-            # Only count resources from live clients.
+            # Only count resources from latest entries of live clients.
             if client["IsInsertion"]:
                 for key, value in client["Resources"].items():
                     resources[key] += value
