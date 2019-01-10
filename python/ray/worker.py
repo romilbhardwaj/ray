@@ -989,7 +989,6 @@ class Worker(object):
 
         return task
 
-
     def main_loop(self):
         """The main loop a worker runs to receive and execute tasks."""
 

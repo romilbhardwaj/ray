@@ -1,6 +1,5 @@
 #include "ray/raylet/node_manager.h"
 
-#include <iostream>
 #include <fstream>
 
 #include "ray/status.h"

@@ -1,4 +1,5 @@
 #include "ray/gcs/tables.h"
+
 #include "ray/common/common_protocol.h"
 #include "ray/gcs/client.h"
 #include "ray/ray_config.h"

@@ -258,7 +258,7 @@ table RayResource {
   resource_capacity: double;
 }
 
-table ClientTableData { // TODO(romil): add job_id here to keep track for the delete pass
+table ClientTableData {
   // The client ID of the client that the message is about.
   client_id: string;
   // The IP address of the client's node manager.
