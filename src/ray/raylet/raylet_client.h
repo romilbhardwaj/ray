@@ -164,10 +164,17 @@ class RayletClient {
                                                const ActorCheckpointID &checkpoint_id);
 
   /// Creates a resource with the specified capacity and client id
-  /// \param object_ids
-  /// \param local_only
-  /// \return
+  /// \param resource_name Name of the resource to be created
+  /// \param capacity Capacity of the resource
+  /// \param client_Id ClientID where the resource is to be created
+  /// \return ray::Status
   ray::Status CreateResource(const std::string &resource_name, const double capacity, const ray::ClientID &client_Id);
+
+  /// Deletes a resource on the specified client id
+  /// \param resource_name Name of the resource to be deleted
+  /// \param client_Id ClientID where the resource is to be deleted
+  /// \return ray::Status
+  ray::Status DeleteResource(const std::string &resource_name, const ray::ClientID &client_Id);
 
 
   Language GetLanguage() const { return language_; }

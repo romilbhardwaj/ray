@@ -394,3 +394,11 @@ ray::Status RayletClient::CreateResource(const std::string &resource_name, const
   fbb.Finish(message);
   return conn_->WriteMessage(MessageType::CreateResourceRequest, &fbb);
 }
+
+ray::Status RayletClient::DeleteResource(const std::string &resource_name, const ray::ClientID &client_Id) {
+  flatbuffers::FlatBufferBuilder fbb;
+  auto message = ray::protocol::CreateDeleteResourceRequest(
+          fbb, fbb.CreateString(resource_name), to_flatbuf(fbb, client_Id));
+  fbb.Finish(message);
+  return conn_->WriteMessage(MessageType::DeleteResourceRequest, &fbb);
+}

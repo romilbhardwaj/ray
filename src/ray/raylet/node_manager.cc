@@ -1,5 +1,6 @@
 #include "ray/raylet/node_manager.h"
 
+#include <iostream>
 #include <fstream>
 
 #include "ray/status.h"
@@ -317,24 +318,46 @@ void NodeManager::GetObjectManagerProfileInfo() {
 }
 
 void NodeManager::ClientAdded(const ClientTableDataT &client_data) {
+
+    std::ofstream myfile;
+    myfile.open ("/tmp/clientadded.txt", std::fstream::out | std::fstream::app);
+    myfile << "Start.\n";
+
   const ClientID client_id = ClientID::from_binary(client_data.client_id);
 
-  RAY_LOG(DEBUG) << "[ClientAdded] Received callback from client id " << client_id;
+  RAY_LOG(DEBUG) << "[ClientAdded] received callback from client id " << client_id;
+    myfile << "[ClientAdded] received callback from client id " << client_id;
   if (client_id == gcs_client_->client_table().GetLocalClientId()) {
     // We got a notification for ourselves, so we are connected to the GCS now.
     // Save this NodeManager's resource information in the cluster resource map.
-    cluster_resource_map_[client_id] = initial_config_.resource_config;
+    // cluster_resource_map_[client_id] = initial_config_.resource_config;  //TODO(romilb): Why do we do this?
+      ResourceSet resources_total(client_data.resources_total_label,
+                                  client_data.resources_total_capacity);
+      cluster_resource_map_[client_id] = SchedulingResources(resources_total);
+      myfile << "received a self connection."
+                     << client_id
+                     << ". Updating resource table.";
     return;
   }
 
   // TODO(atumanov): make remote client lookup O(1)
   if (std::find(remote_clients_.begin(), remote_clients_.end(), client_id) ==
       remote_clients_.end()) {
+    RAY_LOG(DEBUG) << "a new client: " << client_id;
+      myfile << "a new client: " << client_id;
     remote_clients_.push_back(client_id);
   } else {
     // NodeManager connection to this client was already established.
-    RAY_LOG(DEBUG) << "Received a new client connection that already exists: "
-                   << client_id;
+    RAY_LOG(DEBUG) << "received a new client connection that already exists: "
+                   << client_id
+                   << ". Updating resource table.";
+
+      myfile << "received a new client connection that already exists: "
+                     << client_id
+                     << ". Updating resource table.";
+    ResourceSet resources_total(client_data.resources_total_label,
+                                client_data.resources_total_capacity);
+    cluster_resource_map_[client_id] = SchedulingResources(resources_total);
     return;
   }
 
@@ -356,6 +379,7 @@ void NodeManager::ClientAdded(const ClientTableDataT &client_data) {
   ResourceSet resources_total(client_data.resources_total_label,
                               client_data.resources_total_capacity);
   cluster_resource_map_.emplace(client_id, SchedulingResources(resources_total));
+    myfile.close();
 }
 
 ray::Status NodeManager::ConnectRemoteNodeManager(const ClientID &client_id,
@@ -679,6 +703,9 @@ void NodeManager::ProcessClientMessage(
   } break;
   case protocol::MessageType::CreateResourceRequest: {
       ProcessCreateResourceRequest(client, message_data);
+  } break;
+  case protocol::MessageType::DeleteResourceRequest: {
+      ProcessDeleteResourceRequest(client, message_data);
   } break;
   case protocol::MessageType::FetchOrReconstruct: {
     ProcessFetchOrReconstructMessage(client, message_data);
@@ -1122,6 +1149,10 @@ void NodeManager::ProcessNodeManagerMessage(TcpClientConnection &node_manager_cl
 }
 
 void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data) {
+
+    std::ofstream myfile;
+    myfile.open ("/tmp/createreslog.txt", std::fstream::out | std::fstream::app);
+    myfile << "Start.\n";
   // Read the CreateResource message
   auto message = flatbuffers::GetRoot<protocol::CreateResourceRequest>(message_data);
 
@@ -1134,21 +1165,28 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
     client_id = gcs_client_->client_table().GetLocalClientId();
   }
 
-  ClientTableDataT *data = NULL;
+
+  ClientTableDataT data;
   // Get ClientData to add the new resource to and append again
-  gcs_client_->client_table().GetClient(client_id, *data);
+  gcs_client_->client_table().GetClient(client_id, data);
+
+    myfile << "Res name" << resource_name << "\n" << "Client ID: " << client_id.hex() << "\n";
+
+  //TODO(romilb): If client_id not found, return error?
 
   // If resource exists in the ClientTableData, update it, else create it
-  auto existing_resource_label = std::find(data->resources_total_label.begin(), data->resources_total_label.end(), resource_name);
-  if ( existing_resource_label != data->resources_total_label.end()){
+  auto existing_resource_label = std::find(data.resources_total_label.begin(), data.resources_total_label.end(), resource_name);
+  if ( existing_resource_label != data.resources_total_label.end()){
     // Resource already exists, update capacity
-    auto index = std::distance(data->resources_total_label.begin(), existing_resource_label);
-    data->resources_total_capacity[index] = capacity;
+    auto index = std::distance(data.resources_total_label.begin(), existing_resource_label);
+    data.resources_total_capacity[index] = capacity;
+      myfile << "Resource found, updating capacity.\n";
   }
   else{
     // Resource does not exist, create resource and add capacity.
-    data->resources_total_label.push_back(resource_name);
-    data->resources_total_capacity.push_back(capacity);
+    data.resources_total_label.push_back(resource_name);
+    data.resources_total_capacity.push_back(capacity);
+      myfile << "Resource not found, Creating..\n";
   }
 
   std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
@@ -1156,10 +1194,69 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
       worker = worker_pool_.GetRegisteredDriver(client);
   }
   const JobID &job_id = worker->GetAssignedDriverId();
-  const UniqueID &rand_id = UniqueID::from_random();
-  auto data_shared_ptr = std::make_shared<ClientTableDataT>(*data);
-  RAY_CHECK_OK(gcs_client_->client_table().Append(job_id, rand_id, data_shared_ptr, nullptr));
+  //data.is_insertion = true; //TODO(romilb): Is this correct?
+  auto data_shared_ptr = std::make_shared<ClientTableDataT>(data);
+  RAY_CHECK_OK(gcs_client_->client_table().Append(job_id, UniqueID::nil(), data_shared_ptr, nullptr));
+    for(auto i : data.resources_total_label) {
+        // process i
+        myfile <<"RES:" << i << ", ";
+    }
+    myfile << "Resource add done.\n";
+    myfile.close();
 }
+
+void NodeManager::ProcessDeleteResourceRequest(const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data) {
+
+    std::ofstream myfile;
+    myfile.open ("/tmp/romillogdel.txt", std::fstream::out | std::fstream::app);
+    myfile << "Start.\n";
+    // Read the DeleteResource message
+    auto message = flatbuffers::GetRoot<protocol::DeleteResourceRequest>(message_data);
+
+    auto const &resource_name = string_from_flatbuf(*message->resource_name());
+    ClientID client_id = from_flatbuf(*message->client_id());
+
+    // If the python arg was null, set client_id to the local client
+    if (client_id.is_nil()){
+        client_id = gcs_client_->client_table().GetLocalClientId();
+    }
+
+    ClientTableDataT data;
+    // Get ClientData to add the new resource to and append again
+    gcs_client_->client_table().GetClient(client_id, data);
+
+    myfile << "Res name" << resource_name << "\n" << "Client ID: " << client_id.hex() << "\n";
+
+    //TODO(romilb): If client_id not found, return error?
+
+    // If resource exists in the ClientTableData, update it, else create it
+    auto existing_resource_label = std::find(data.resources_total_label.begin(), data.resources_total_label.end(), resource_name);
+    if ( existing_resource_label != data.resources_total_label.end()){
+        // Resource exists, delete
+        auto index = std::distance(data.resources_total_label.begin(), existing_resource_label);
+        data.resources_total_label.erase(data.resources_total_label.begin()+index);
+        data.resources_total_capacity.erase(data.resources_total_capacity.begin()+index);
+        myfile << "Resource found, deleted.\n";
+    }
+    else{
+        // Resource does not exist, do nothing
+    }
+
+    std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
+    if (not worker){
+        worker = worker_pool_.GetRegisteredDriver(client);
+    }
+    const JobID &job_id = worker->GetAssignedDriverId();
+    auto data_shared_ptr = std::make_shared<ClientTableDataT>(data);
+    RAY_CHECK_OK(gcs_client_->client_table().Append(job_id, UniqueID::nil(), data_shared_ptr, nullptr));
+    for(auto i : data.resources_total_label) {
+        // process i
+        myfile <<"RESdel:" << i << ", ";
+    }
+    myfile << "Resource delete done.\n";
+    myfile.close();
+}
+
 
 void NodeManager::ScheduleTasks(
     std::unordered_map<ClientID, SchedulingResources> &resource_map) {

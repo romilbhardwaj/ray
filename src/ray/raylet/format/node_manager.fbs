@@ -81,6 +81,8 @@ enum MessageType:int {
   ConnectClient,
   // Create dynamic custom resource
   CreateResourceRequest,
+  // Delete dynamic custom resource
+  DeleteResourceRequest,
 }
 
 table TaskExecutionSpecification {
@@ -243,5 +245,12 @@ table CreateResourceRequest{
   // Capacity of the resource to be created
   capacity: double;
   // Client ID where this resource will be created
+  client_id: string;
+}
+
+table DeleteResourceRequest{
+  // Name of the resource to be deleted
+  resource_name: string;
+  // Client ID where this resource will be deleted
   client_id: string;
 }
