@@ -2767,3 +2767,146 @@ def test_raylet_is_robust_to_random_messages(shutdown_only):
         return 1
 
     assert ray.get(f.remote()) == 1
+
+def test_dynamic_res_creation(ray_start):
+    # This test creates a resource locally (without specifying the client_id)
+    res_name = "test_res"
+    res_capacity = 1.0
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity):
+        ray.experimental.create_resource(resource_name, resource_capacity)
+    ray.get(create_res.remote(res_name, res_capacity))
+    available_res = ray.global_state.available_resources()
+
+    assert available_res[res_name] == res_capacity
+
+
+def test_dynamic_res_deletion(shutdown_only):
+    # This test deletes a resource locally (without specifying the client_id)
+    res_name = "test_res"
+    res_capacity = 1.0
+
+    ray.init(num_cpus=1, resources={res_name: res_capacity})
+
+    @ray.remote
+    def delete_res(resource_name):
+        ray.experimental.delete_resource(resource_name)
+    ray.get(delete_res.remote(res_name))
+    available_res = ray.global_state.available_resources()
+
+    assert res_name not in available_res
+
+def test_dynamic_res_updation_clientid(ray_start_cluster):
+    # This test updates the resource capacity on a node
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 1.0
+    num_nodes = 3
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    target_clientid = ray.global_state.client_table()[1]['ClientID']
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=client_id)
+
+    # Create resource
+    ray.get(create_res.remote(res_name, res_capacity, target_clientid))
+
+    # Update resource
+    new_capacity = res_capacity+1
+    ray.get(create_res.remote(res_name, new_capacity, target_clientid))
+
+    target_client = next(client for client in ray.global_state.client_table() if client['ClientID'] == target_clientid)
+    resources = target_client['Resources']
+
+    assert res_name in resources
+    assert resources[res_name] == new_capacity
+
+def test_dynamic_res_creation_clientid(ray_start_cluster):
+    # This test creates a resource on a specific client
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 1.0
+    num_nodes = 3
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    target_clientid = ray.global_state.client_table()[1]['ClientID']
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, res_client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=res_client_id)
+
+
+    ray.get(create_res.remote(res_name, res_capacity, target_clientid))
+    target_client = next(client for client in ray.global_state.client_table() if client['ClientID'] == target_clientid)
+    resources = target_client['Resources']
+
+    assert res_name in resources
+    assert resources[res_name] == res_capacity
+
+def test_dynamic_res_creation_clientid_multiple(ray_start_cluster):
+    # This test creates resources on multiple clients using the clientid specifier
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 1.0
+    num_nodes = 3
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    target_clientids = [client['ClientID'] for client in ray.global_state.client_table()]
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, res_client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=res_client_id)
+
+    results = []
+    for cid in target_clientids:
+        results.append(create_res.remote(res_name, res_capacity, cid))
+    ray.get(results)
+
+    # Wait for heartbeats to be sent out
+    time.sleep(0.1)
+    for cid in target_clientids:
+        target_client = next(client for client in ray.global_state.client_table() if client['ClientID'] == cid)
+        resources = target_client['Resources']
+        assert resources[res_name] == res_capacity
+
+def test_dynamic_res_deletion_clientid(ray_start_cluster):
+    # This test deletes a resource on a given client id
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 1.0
+    num_nodes = 5
+
+    for i in range(num_nodes):
+        # Create resource on all nodes, but later we'll delete it from a target node
+        cluster.add_node(resources={res_name: res_capacity})
+
+    ray.init(redis_address=cluster.redis_address)
+
+    target_clientid = ray.global_state.client_table()[1]['ClientID']
+
+    # Launch the delete task
+    @ray.remote
+    def delete_res(resource_name, res_client_id):
+        ray.experimental.delete_resource(resource_name, client_id=res_client_id)
+    ray.get(delete_res.remote(res_name, target_clientid))
+
+    target_client = next(client for client in ray.global_state.client_table() if client['ClientID'] == target_clientid)
+    resources = target_client['Resources']
+    print(ray.global_state.cluster_resources())
+    assert res_name not in resources
