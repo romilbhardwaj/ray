@@ -13,6 +13,7 @@ from ray.function_manager import FunctionDescriptor
 import ray.gcs_utils
 
 from ray.ray_constants import ID_SIZE
+from ray.core.generated.EntryType import EntryType
 from ray.utils import (decode, binary_to_object_id, binary_to_hex,
                        hex_to_binary)
 
@@ -57,7 +58,7 @@ def parse_client_table(redis_client):
         # If this client is being removed, then it must
         # have previously been inserted, and
         # it cannot have previously been removed.
-        if not client.IsInsertion():
+        if client.EntryType() == EntryType.DELETION:
             assert client_id in node_info, "Client removed not found!"
             assert node_info[client_id]["IsInsertion"], (
                 "Unexpected duplicate removal of client.")
@@ -66,7 +67,7 @@ def parse_client_table(redis_client):
 
         node_info[client_id] = {
             "ClientID": client_id,
-            "IsInsertion": client.IsInsertion(),
+            "IsInsertion": client.EntryType() == EntryType.INSERTION,
             "NodeManagerAddress": decode(
                 client.NodeManagerAddress(), allow_none=True),
             "NodeManagerPort": client.NodeManagerPort(),
@@ -401,6 +402,29 @@ class GlobalState(object):
         self._check_connected()
 
         return parse_client_table(self.redis_client)
+
+    def client_table_debug(self):
+        """Fetch and parse the Redis DB client table.
+
+        Returns:
+            Information about the Ray clients in the cluster.
+        """
+        self._check_connected()
+
+        NIL_CLIENT_ID = ray.ObjectID.nil().binary()
+        message = self.redis_client.execute_command(
+            "RAY.TABLE_LOOKUP", ray.gcs_utils.TablePrefix.CLIENT, "",
+            NIL_CLIENT_ID)
+
+        # Handle the case where no clients are returned. This should only
+        # occur potentially immediately after the cluster is started.
+        if message is None:
+            return []
+
+        node_info = {}
+        gcs_entry = ray.gcs_utils.GcsTableEntry.GetRootAsGcsTableEntry(
+            message, 0)
+        return gcs_entry
 
     def _profile_table(self, batch_id):
         """Get the profile events for a given batch of profile events.

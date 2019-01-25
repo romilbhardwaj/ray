@@ -281,7 +281,7 @@ void ClientTable::RegisterClientAddedCallback(const ClientTableCallback &callbac
   client_added_callback_ = callback;
   // Call the callback for any added clients that are cached.
   for (const auto &entry : client_cache_) {
-    if (!entry.first.is_nil() && entry.second.is_insertion) {
+    if (!entry.first.is_nil() && (entry.second.entry_type == EntryType::INSERTION)) {
       client_added_callback_(client_, entry.first, entry.second);
     }
   }
@@ -291,7 +291,7 @@ void ClientTable::RegisterClientRemovedCallback(const ClientTableCallback &callb
   client_removed_callback_ = callback;
   // Call the callback for any removed clients that are cached.
   for (const auto &entry : client_cache_) {
-    if (!entry.first.is_nil() && !entry.second.is_insertion) {
+    if (!entry.first.is_nil() && (entry.second.entry_type == EntryType::DELETION)) {
       client_removed_callback_(client_, entry.first, entry.second);
     }
   }
@@ -311,16 +311,16 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
   } else {
     // If the entry is in the cache, then the notification is new if the client
     // was alive and is now dead or resources have been updated.
-    bool was_inserted = entry->second.is_insertion;
-    bool is_deleted = !data.is_insertion;
+    bool was_inserted = (entry->second.entry_type == EntryType::INSERTION);
+    bool is_deleted = (entry->second.entry_type == EntryType::DELETION);
     is_new = (was_inserted && is_deleted);
     // If the entry was modified, use a flag to ensure ClientAdded callback is still called
-    is_modified = (was_inserted && data.is_insertion);
+    is_modified = (was_inserted && (entry->second.entry_type == EntryType::INSERTION)); //todo(romilb): Fix logic here.
     // Once a client with a given ID has been removed, it should never be added
     // again. If the entry was in the cache and the client was deleted, check
     // that this new notification is not an insertion.
-    if (!entry->second.is_insertion) {
-      RAY_CHECK(!data.is_insertion)
+    if (entry->second.entry_type == EntryType::DELETION) {
+      RAY_CHECK((data.entry_type == EntryType::DELETION))
           << "Notification for addition of a client that was already removed:"
           << client_id;
     }
@@ -331,7 +331,7 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
 
   // If the notification is new, call any registered callbacks.
   if (is_new || is_modified) {
-    if (data.is_insertion) {
+    if (data.entry_type == EntryType::INSERTION) {
       if (client_added_callback_ != nullptr) {
         client_added_callback_(client, client_id, data);
       }
@@ -370,7 +370,7 @@ Status ClientTable::Connect(const ClientTableDataT &local_client) {
 
   // Construct the data to add to the client table.
   auto data = std::make_shared<ClientTableDataT>(local_client_);
-  data->is_insertion = true;
+  data->entry_type = EntryType::INSERTION;
   // Callback to handle our own successful connection once we've added
   // ourselves.
   auto add_callback = [this](AsyncGcsClient *client, const UniqueID &log_key,
@@ -401,7 +401,7 @@ Status ClientTable::Connect(const ClientTableDataT &local_client) {
 
 Status ClientTable::Disconnect() {
   auto data = std::make_shared<ClientTableDataT>(local_client_);
-  data->is_insertion = false;
+  data->entry_type = EntryType::DELETION;
   auto add_callback = [this](AsyncGcsClient *client, const ClientID &id,
                              const ClientTableDataT &data) {
     HandleConnected(client, data);
@@ -416,7 +416,7 @@ Status ClientTable::Disconnect() {
 ray::Status ClientTable::MarkDisconnected(const ClientID &dead_client_id) {
   auto data = std::make_shared<ClientTableDataT>();
   data->client_id = dead_client_id.binary();
-  data->is_insertion = false;
+  data->entry_type = EntryType::DELETION;
   return Append(JobID::nil(), client_log_key_, data, nullptr);
 }
 

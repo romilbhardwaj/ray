@@ -641,17 +641,17 @@ TEST_F(TestGcsWithAsio, TestLogSubscribeCancel) {
 }
 
 void ClientTableNotification(gcs::AsyncGcsClient *client, const ClientID &client_id,
-                             const ClientTableDataT &data, bool is_insertion) {
+                             const ClientTableDataT &data, EntryType entry_type) {
   ClientID added_id = client->client_table().GetLocalClientId();
   ASSERT_EQ(client_id, added_id);
   ASSERT_EQ(ClientID::from_binary(data.client_id), added_id);
   ASSERT_EQ(ClientID::from_binary(data.client_id), added_id);
-  ASSERT_EQ(data.is_insertion, is_insertion);
+  ASSERT_EQ(data.entry_type, entry_type);
 
   ClientTableDataT cached_client;
   client->client_table().GetClient(added_id, cached_client);
   ASSERT_EQ(ClientID::from_binary(cached_client.client_id), added_id);
-  ASSERT_EQ(cached_client.is_insertion, is_insertion);
+  ASSERT_EQ(cached_client.entry_type, entry_type);
 }
 
 void TestClientTableConnect(const JobID &job_id,
@@ -660,7 +660,7 @@ void TestClientTableConnect(const JobID &job_id,
   // event will stop the event loop.
   client->client_table().RegisterClientAddedCallback(
       [](gcs::AsyncGcsClient *client, const UniqueID &id, const ClientTableDataT &data) {
-        ClientTableNotification(client, id, data, true);
+        ClientTableNotification(client, id, data, EntryType::INSERTION);
         test->Stop();
       });
 
@@ -685,14 +685,14 @@ void TestClientTableDisconnect(const JobID &job_id,
   // event will stop the event loop.
   client->client_table().RegisterClientAddedCallback(
       [](gcs::AsyncGcsClient *client, const UniqueID &id, const ClientTableDataT &data) {
-        ClientTableNotification(client, id, data, /*is_insertion=*/true);
+        ClientTableNotification(client, id, data, EntryType::INSERTION);
         // Disconnect from the client table. We should receive a notification
         // for the removal of our own entry.
         RAY_CHECK_OK(client->client_table().Disconnect());
       });
   client->client_table().RegisterClientRemovedCallback(
       [](gcs::AsyncGcsClient *client, const UniqueID &id, const ClientTableDataT &data) {
-        ClientTableNotification(client, id, data, /*is_insertion=*/false);
+        ClientTableNotification(client, id, data, EntryType::DELETION);
         test->Stop();
       });
   // Connect to the client table. We should receive notification for the
@@ -716,11 +716,11 @@ void TestClientTableImmediateDisconnect(const JobID &job_id,
   // event will stop the event loop.
   client->client_table().RegisterClientAddedCallback(
       [](gcs::AsyncGcsClient *client, const UniqueID &id, const ClientTableDataT &data) {
-        ClientTableNotification(client, id, data, true);
+        ClientTableNotification(client, id, data, EntryType::INSERTION);
       });
   client->client_table().RegisterClientRemovedCallback(
       [](gcs::AsyncGcsClient *client, const UniqueID &id, const ClientTableDataT &data) {
-        ClientTableNotification(client, id, data, false);
+        ClientTableNotification(client, id, data, EntryType::DELETION);
         test->Stop();
       });
   // Connect to then immediately disconnect from the client table. We should
