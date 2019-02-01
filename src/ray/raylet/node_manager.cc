@@ -160,6 +160,21 @@ ray::Status NodeManager::RegisterGcs() {
   };
   gcs_client_->client_table().RegisterClientRemovedCallback(node_manager_client_removed);
 
+  // Register a callback on the client table for resource create/update requests
+  auto node_manager_resource_createupdated= [this](
+      gcs::AsyncGcsClient *client, const UniqueID &id, const ClientTableDataT &data) {
+    ResourceCreateUpdated(data);
+  };
+  gcs_client_->client_table().RegisterResourceCreateUpdatedCallback(node_manager_resource_createupdated);
+
+  // Register a callback on the client table for resource delete requests
+  auto node_manager_resource_deleted= [this](
+      gcs::AsyncGcsClient *client, const UniqueID &id, const ClientTableDataT &data) {
+    ResourceDeleted(data);
+  };
+  gcs_client_->client_table().RegisterResourceDeletedCallback(node_manager_resource_deleted);
+
+
   // Subscribe to heartbeat batches from the monitor.
   const auto &heartbeat_batch_added = [this](
       gcs::AsyncGcsClient *client, const ClientID &id,
@@ -323,10 +338,7 @@ void NodeManager::ClientAdded(const ClientTableDataT &client_data) {
   if (client_id == gcs_client_->client_table().GetLocalClientId()) {
     // We got a notification for ourselves, so we are connected to the GCS now.
     // Save this NodeManager's resource information in the cluster resource map.
-    // cluster_resource_map_[client_id] = initial_config_.resource_config;  //TODO(romilb): Why do we do this?
-      ResourceSet resources_total(client_data.resources_total_label,
-                                  client_data.resources_total_capacity);
-      cluster_resource_map_[client_id] = SchedulingResources(resources_total);
+    cluster_resource_map_[client_id] = initial_config_.resource_config;
     return;
   }
 
@@ -338,11 +350,7 @@ void NodeManager::ClientAdded(const ClientTableDataT &client_data) {
   } else {
     // NodeManager connection to this client was already established.
     RAY_LOG(DEBUG) << "received a new client connection that already exists: "
-                   << client_id
-                   << ". Updating resource table.";
-    ResourceSet resources_total(client_data.resources_total_label,
-                                client_data.resources_total_capacity);
-    cluster_resource_map_[client_id] = SchedulingResources(resources_total);
+                   << client_id;
     return;
   }
 
@@ -439,6 +447,48 @@ void NodeManager::ClientRemoved(const ClientTableDataT &client_data) {
   // Notify the object directory that the client has been removed so that it
   // can remove it from any cached locations.
   object_directory_->HandleClientRemoved(client_id);
+}
+
+
+void NodeManager::ResourceCreateUpdated(const ClientTableDataT &client_data) {
+  const ClientID client_id = ClientID::from_binary(client_data.client_id);
+  RAY_LOG(DEBUG) << "[ResourceCreateUpdated] received callback from client id " << client_id << ". Updating resource map.";
+  ResourceSet new_res_set(client_data.resources_total_label,
+                              client_data.resources_total_capacity);
+
+  const ResourceSet &old_res_set = cluster_resource_map_[client_id].GetTotalResources();
+  ResourceSet difference_set = old_res_set.FindUpdatedResources(new_res_set);
+  RAY_LOG(DEBUG) << "[ResourceCreateUpdated] The difference in the resource map is " << difference_set.ToString();
+
+  // Update local_available_resources_
+  for (const auto &resource_pair : difference_set.GetResourceMap()) {
+    const std::string &resource_label = resource_pair.first;
+    const double &new_resource_capacity = resource_pair.second;
+    local_available_resources_.CreateResource(resource_label, new_resource_capacity);
+  }
+  RAY_LOG(DEBUG) << "[ResourceCreateUpdated] Updated local_available_resources, now writing cluster_resource_map.";
+  cluster_resource_map_[client_id] = SchedulingResources(new_res_set);
+  return;
+}
+
+void NodeManager::ResourceDeleted(const ClientTableDataT &client_data) {
+  //TODO(romilb): This callback is the same as resource deleted since it the cache has already updated client_data. Can we remove this?
+  const ClientID client_id = ClientID::from_binary(client_data.client_id);
+  RAY_LOG(DEBUG) << "[ResourceDeleted] received callback from client id " << client_id << ". Updating resource map.";
+  ResourceSet new_res_set(client_data.resources_total_label,
+                              client_data.resources_total_capacity);
+
+  const ResourceSet &old_res_set = cluster_resource_map_[client_id].GetTotalResources();
+  ResourceSet deleted_set = old_res_set.FindDeletedResources(new_res_set);
+  RAY_LOG(DEBUG) << "[ResourceDeleted] The difference in the resource map is " << deleted_set.ToString();
+
+  // Update local_available_resources_
+  for (const auto &resource_pair : deleted_set.GetResourceMap()) {
+    const std::string &resource_label = resource_pair.first;
+    local_available_resources_.DeleteResource(resource_label);
+  }
+  cluster_resource_map_[client_id] = SchedulingResources(new_res_set);
+  return;
 }
 
 void NodeManager::HeartbeatAdded(const ClientID &client_id,
@@ -624,6 +674,7 @@ std::unordered_map<ResourceSet, ordered_set<TaskID>> MakeTasksWithResources(
 
 void NodeManager::DispatchTasks(
     const std::unordered_map<ResourceSet, ordered_set<TaskID>> &tasks_with_resources) {
+  RAY_LOG(DEBUG) << "[DispatchTasks] Dispatch tasks called.";
   std::unordered_set<TaskID> removed_task_ids;
   for (const auto &it : tasks_with_resources) {
     const auto &task_resources = it.first;
@@ -1146,25 +1197,16 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
   }
 
 
+  // Add the new resource to a skeleton ClientTableDataT object
   ClientTableDataT data;
-  // Get ClientData to add the new resource to and append again
   gcs_client_->client_table().GetClient(client_id, data);
-  //TODO(romilb): If client_id not found, return error?
+  // Replace the resource vectors with the delta
+  data.resources_total_label = std::vector<std::string>{resource_name};
+  data.resources_total_capacity = std::vector<double>{capacity};
+  // Set the correct flag for entry_type
+  data.entry_type = EntryType::RES_CREATEUPDATE;
 
-  // If resource exists in the ClientTableData, update it, else create it
-  auto existing_resource_label = std::find(data.resources_total_label.begin(), data.resources_total_label.end(), resource_name);
-  if ( existing_resource_label != data.resources_total_label.end()){
-    // Resource already exists, update capacity
-    auto index = std::distance(data.resources_total_label.begin(), existing_resource_label);
-    data.resources_total_capacity[index] = capacity;
-  }
-  else{
-    // Resource does not exist, create resource and add capacity.
-    data.resources_total_label.push_back(resource_name);
-    data.resources_total_capacity.push_back(capacity);
-  }
-
-  // Update the client table. This calls the clientAdded callback, which updates cluster_resource_map_.
+  // Submit to the client table. This calls the clientAdded callback, which updates cluster_resource_map_.
   std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
   if (not worker){
       worker = worker_pool_.GetRegisteredDriver(client);
@@ -1175,40 +1217,35 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
 }
 
 void NodeManager::ProcessDeleteResourceRequest(const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data) {
-    // Read the DeleteResource message
-    auto message = flatbuffers::GetRoot<protocol::DeleteResourceRequest>(message_data);
+  // Read the CreateResource message
+  auto message = flatbuffers::GetRoot<protocol::DeleteResourceRequest>(message_data);
 
-    auto const &resource_name = string_from_flatbuf(*message->resource_name());
-    ClientID client_id = from_flatbuf(*message->client_id());
+  auto const &resource_name = string_from_flatbuf(*message->resource_name());
+  ClientID client_id = from_flatbuf(*message->client_id());
 
-    // If the python arg was null, set client_id to the local client
-    if (client_id.is_nil()){
-        client_id = gcs_client_->client_table().GetLocalClientId();
-    }
+  // If the python arg was null, set client_id to the local client
+  if (client_id.is_nil()){
+    client_id = gcs_client_->client_table().GetLocalClientId();
+  }
 
-    ClientTableDataT data;
-    // Get ClientData to add the new resource to and append again
-    gcs_client_->client_table().GetClient(client_id, data);
-    //TODO(romilb): If client_id not found, return error?
 
-    // If resource exists in the ClientTableData, delete it
-    auto existing_resource_label = std::find(data.resources_total_label.begin(), data.resources_total_label.end(), resource_name);
-    if ( existing_resource_label != data.resources_total_label.end()){
-        // Resource exists, delete
-        auto index = std::distance(data.resources_total_label.begin(), existing_resource_label);
-        data.resources_total_label.erase(data.resources_total_label.begin()+index);
-        data.resources_total_capacity.erase(data.resources_total_capacity.begin()+index);
-    }
-    // If Resource does not exist, do nothing
+  // Add the new resource to a skeleton ClientTableDataT object
+  ClientTableDataT data;
+  gcs_client_->client_table().GetClient(client_id, data);
+  // Replace the resource vectors with the delta
+  data.resources_total_label = std::vector<std::string>{resource_name};
+  data.resources_total_capacity = std::vector<double>{0}; // This is just a placeholder. Actually the resource gets deleted.
+  // Set the correct flag for entry_type
+  data.entry_type = EntryType::RES_DELETE;
 
-    // Update the client table. This calls the clientAdded callback, which updates cluster_resource_map_.
-    std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
-    if (not worker){
-        worker = worker_pool_.GetRegisteredDriver(client);
-    }
-    const JobID &job_id = worker->GetAssignedDriverId();
-    auto data_shared_ptr = std::make_shared<ClientTableDataT>(data);
-    RAY_CHECK_OK(gcs_client_->client_table().Append(job_id, UniqueID::nil(), data_shared_ptr, nullptr));
+  // Submit to the client table. This calls the clientAdded callback, which updates cluster_resource_map_.
+  std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
+  if (not worker){
+    worker = worker_pool_.GetRegisteredDriver(client);
+  }
+  const JobID &job_id = worker->GetAssignedDriverId();
+  auto data_shared_ptr = std::make_shared<ClientTableDataT>(data);
+  RAY_CHECK_OK(gcs_client_->client_table().Append(job_id, UniqueID::nil(), data_shared_ptr, nullptr));
 }
 
 

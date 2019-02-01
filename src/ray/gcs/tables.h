@@ -605,6 +605,16 @@ class ClientTable : public Log<UniqueID, ClientTableData> {
   /// \param callback The callback to register.
   void RegisterClientRemovedCallback(const ClientTableCallback &callback);
 
+  /// Register a callback to call when a resource is created or updated.
+  ///
+  /// \param callback The callback to register.
+  void RegisterResourceCreateUpdatedCallback(const ClientTableCallback &callback);
+
+  /// Register a callback to call when a resource is deleted.
+  ///
+  /// \param callback The callback to register.
+  void RegisterResourceDeletedCallback(const ClientTableCallback &callback);
+
   /// Get a client's information from the cache. The cache only contains
   /// information for clients that we've heard a notification for.
   ///
@@ -661,6 +671,10 @@ class ClientTable : public Log<UniqueID, ClientTableData> {
   ClientTableCallback client_added_callback_;
   /// The callback to call when a client is removed.
   ClientTableCallback client_removed_callback_;
+  /// The callback to call when a resource is created or updated.
+  ClientTableCallback resource_createupdated_callback_;
+  /// The callback to call when a resource is deleted.
+  ClientTableCallback resource_deleted_callback_;
   /// A cache for information about all clients.
   std::unordered_map<ClientID, ClientTableDataT> client_cache_;
   /// The set of removed clients.

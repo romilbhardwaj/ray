@@ -1,6 +1,7 @@
 #include "scheduling_resources.h"
 
 #include <cmath>
+#include <algorithm>
 #include <sstream>
 
 #include "ray/util/logging.h"
@@ -160,6 +161,43 @@ const std::unordered_map<std::string, double> &ResourceSet::GetResourceMap() con
   return resource_capacity_;
 };
 
+
+ResourceSet ResourceSet::FindUpdatedResources(const ray::raylet::ResourceSet &new_res_set) const{
+  // Find any new resources and return a ResourceSet with the resource and new capacities
+  ResourceSet UpdatedResourceSet;
+  for (const auto &resource_pair : new_res_set.GetResourceMap()) {
+    const std::string &resource_label = resource_pair.first;
+    const double &new_resource_capacity = resource_pair.second;
+    if (resource_capacity_.count(resource_label) == 1) {
+      // Resource exists, check if updated
+      double old_resource_capacity = resource_capacity_.at(resource_label);
+      if (old_resource_capacity != new_resource_capacity) {
+        UpdatedResourceSet.AddResource(resource_label, new_resource_capacity);
+      }
+    } else {
+      // Resource does not exist in the old set, add to return set
+      UpdatedResourceSet.AddResource(resource_label, new_resource_capacity);
+    }
+  }
+  return UpdatedResourceSet;
+}
+
+
+ResourceSet ResourceSet::FindDeletedResources(const ray::raylet::ResourceSet &new_res_set) const {
+  // Find any new resources and return a ResourceSet with the resource and new capacities
+  ResourceSet DeletedResourceSet;
+  auto &new_res_map = new_res_set.GetResourceMap();
+  for (const auto &resource_pair : resource_capacity_) {
+    const std::string &resource_label = resource_pair.first;
+    const double &old_resource_capacity = resource_pair.second;
+    if (new_res_map.count(resource_label) != 1) {
+      // Resource does not exist, add to return set
+      DeletedResourceSet.AddResource(resource_label, old_resource_capacity);
+      }
+  }
+  return DeletedResourceSet;
+}
+
 /// ResourceIds class implementation
 
 ResourceIds::ResourceIds() {}
@@ -170,16 +208,27 @@ ResourceIds::ResourceIds(double resource_quantity) {
   for (int64_t i = 0; i < whole_quantity; ++i) {
     whole_ids_.push_back(i);
   }
+  greatest_id_ = resource_quantity;
+  total_capacity_ = TotalQuantity();
 }
 
-ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids) : whole_ids_(whole_ids) {}
+ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids) : whole_ids_(whole_ids), total_capacity_(whole_ids.size()) {}
 
-ResourceIds::ResourceIds(const std::vector<std::pair<int64_t, double>> &fractional_ids)
-    : fractional_ids_(fractional_ids) {}
+ResourceIds::ResourceIds(const std::vector<std::pair<int64_t, double>> &fractional_ids){
+  fractional_ids_ = fractional_ids;
+  // Find the max id and set it to greatest_id_;
+  const auto p = std::minmax_element(fractional_ids_.begin(), fractional_ids_.end());
+  const auto &max = p.second->first;
+  greatest_id_ = max;
+  total_capacity_ = TotalQuantity();
+}
 
 ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids,
                          const std::vector<std::pair<int64_t, double>> &fractional_ids)
-    : whole_ids_(whole_ids), fractional_ids_(fractional_ids) {}
+    : whole_ids_(whole_ids),
+    fractional_ids_(fractional_ids),
+    greatest_id_(*std::max_element(whole_ids.begin(), whole_ids.end())),
+    total_capacity_(TotalQuantity()){}
 
 bool ResourceIds::Contains(double resource_quantity) const {
   RAY_CHECK(resource_quantity >= 0);
@@ -271,6 +320,7 @@ void ResourceIds::Release(const ResourceIds &resource_ids) {
 ResourceIds ResourceIds::Plus(const ResourceIds &resource_ids) const {
   ResourceIds resource_ids_to_return(whole_ids_, fractional_ids_);
   resource_ids_to_return.Release(resource_ids);
+  resource_ids_to_return.greatest_id_ = std::max(greatest_id_, resource_ids.greatest_id_);
   return resource_ids_to_return;
 }
 
@@ -300,6 +350,33 @@ std::string ResourceIds::ToString() const {
   }
   return_string += "]";
   return return_string;
+}
+
+
+void ResourceIds::UpdateCapacity(double new_capacity) {
+  double capacity_delta = new_capacity - total_capacity_;
+  if (capacity_delta < 0) {
+    DecreaseCapacity(-1*capacity_delta);
+  }
+  else{
+    IncreaseCapacity(capacity_delta);
+  }
+}
+
+void ResourceIds::IncreaseCapacity(double increment_quantity) {
+  for (int i=0; i<increment_quantity; i++) {
+    whole_ids_.push_back(++greatest_id_);
+  }
+  total_capacity_ += increment_quantity;
+}
+
+void ResourceIds::DecreaseCapacity(double decrement_quantity) {
+  if (TotalQuantity() < decrement_quantity){
+    throw "You're requesting deletion of more resources than are available. Not implemented yet!";
+  }
+  // To decrease capacity, just acquire resources and forget about them. They are popped from whole_ids when acquired.
+  Acquire(decrement_quantity);
+  total_capacity_ -= decrement_quantity;
 }
 
 bool ResourceIds::IsWhole(double resource_quantity) const {
@@ -361,7 +438,7 @@ ResourceIdSet ResourceIdSet::Acquire(const ResourceSet &resource_set) {
   return ResourceIdSet(acquired_resources);
 }
 
-void ResourceIdSet::Release(const ResourceIdSet &resource_id_set) {
+void ResourceIdSet::Release(const ray::raylet::ResourceIdSet &resource_id_set, bool strict) {
   for (auto const &resource_pair : resource_id_set.AvailableResources()) {
     auto const &resource_name = resource_pair.first;
     auto const &resource_ids = resource_pair.second;
@@ -372,9 +449,15 @@ void ResourceIdSet::Release(const ResourceIdSet &resource_id_set) {
 
     auto it = available_resources_.find(resource_name);
     if (it == available_resources_.end()) {
-      // This should not happen when Release is called on resources that were obtained
-      // through a corresponding call to Acquire.
-      available_resources_[resource_name] = resource_ids;
+      if (strict==true){
+        // Resource not found in ResourceIdSet. This happens when a resource was acquired,
+        // got deleted by resource deletion call and later got released by a task. In this case, do nothing
+      }
+      else{
+        // This will happen when Release is called on resources that were not obtained through
+        // a corresponding call to Acquire. This is primarily used in the Plus function
+        available_resources_[resource_name] = resource_ids;
+      }
     } else {
       it->second.Release(resource_ids);
     }
@@ -385,8 +468,25 @@ void ResourceIdSet::Clear() { available_resources_.clear(); }
 
 ResourceIdSet ResourceIdSet::Plus(const ResourceIdSet &resource_id_set) const {
   ResourceIdSet resource_id_set_to_return(available_resources_);
-  resource_id_set_to_return.Release(resource_id_set);
+  resource_id_set_to_return.Release(resource_id_set, false);
   return resource_id_set_to_return;
+}
+
+void ResourceIdSet::CreateResource(const std::string resource_name, const double capacity) {
+  auto it = available_resources_.find(resource_name);
+  if (it != available_resources_.end()) {
+    // If resource exists, update capacity
+    ResourceIds &resid = (it->second);
+    resid.UpdateCapacity(capacity);
+  }
+  else{
+    // If resource does not exist, create
+    available_resources_[resource_name] = ResourceIds(capacity);
+  }
+}
+
+void ResourceIdSet::DeleteResource(const std::string resource_name) {
+  available_resources_.erase(resource_name);
 }
 
 const std::unordered_map<std::string, ResourceIds> &ResourceIdSet::AvailableResources()

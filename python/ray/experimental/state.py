@@ -60,14 +60,32 @@ def parse_client_table(redis_client):
         # it cannot have previously been removed.
         if client.EntryType() == EntryType.DELETION:
             assert client_id in node_info, "Client removed not found!"
-            assert node_info[client_id]["IsInsertion"], (
+            assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
                 "Unexpected duplicate removal of client.")
-        else:
+        elif client.EntryType() == EntryType.INSERTION:
             ordered_client_ids.append(client_id)
+
+        elif client.EntryType() == EntryType.RES_CREATEUPDATE:
+            assert client_id in node_info, "Client not found!"
+            assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
+                "Unexpected removal of client before resource updation.")
+            res_map = node_info[client_id]["Resources"]
+            for res in resources:
+                res_map[res] = resources[res]
+            node_info[client_id]["Resources"] = res_map
+
+        elif client.EntryType() == EntryType.RES_DELETE:
+            assert client_id in node_info, "Client not found!"
+            assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
+                "Unexpected removal of client before resource deletion.")
+            res_map = node_info[client_id]["Resources"]
+            for res in resources:
+                res_map.pop(res, None)
+            node_info[client_id]["Resources"] = res_map
 
         node_info[client_id] = {
             "ClientID": client_id,
-            "IsInsertion": client.EntryType() == EntryType.INSERTION,
+            "EntryType": client.EntryType(),
             "NodeManagerAddress": decode(
                 client.NodeManagerAddress(), allow_none=True),
             "NodeManagerPort": client.NodeManagerPort(),

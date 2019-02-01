@@ -118,6 +118,16 @@ class NodeManager {
   /// \return Void.
   void ClientRemoved(const ClientTableDataT &client_data);
 
+  /// Handler for the addition or updation of a resource in the GCS
+  /// \param client_data Data associated with the new client.
+  /// \return Void.
+  void ResourceCreateUpdated(const ClientTableDataT &client_data);
+
+  /// Handler for the deletion of a resource in the GCS
+  /// \param client_data Data associated with the new client.
+  /// \return Void.
+  void ResourceDeleted(const ClientTableDataT &client_data);
+
   /// Send heartbeats to the GCS.
   void Heartbeat();
 
