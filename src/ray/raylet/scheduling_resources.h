@@ -67,12 +67,18 @@ class ResourceSet {
   /// False otherwise.
   bool IsSuperset(const ResourceSet &other) const;
 
-  /// \brief Add a new resource to the resource set.
+  /// \brief Add or update a new resource to the resource set.
   ///
   /// \param resource_name: name/label of the resource to add.
   /// \param capacity: numeric capacity value for the resource to add.
   /// \return True, if the resource was successfully added. False otherwise.
   bool AddResource(const std::string &resource_name, double capacity);
+
+  /// \brief Delete a resource from the resource set.
+  ///
+  /// \param resource_name: name/label of the resource to delete.
+  /// \return True, if the resource was successfully deleted. False otherwise.
+  bool DeleteResource(const std::string &resource_name);
 
   /// \brief Remove the specified resource from the resource set.
   ///
@@ -426,6 +432,18 @@ class SchedulingResources {
   ///
   /// \return string.
   std::string DebugString() const;
+
+  /// \brief Update total, available and load resources with the specified capacity. Create if not exists.
+  ///
+  /// \param
+  /// \return Void.
+  void UpdateResource(std::string resource_name, double capacity);
+
+  /// \brief Delete resource from total, available and load resources.
+  ///
+  /// \param
+  /// \return Void.
+  void DeleteResource(std::string resource_name);
 
  private:
   /// Static resource configuration (e.g., static_resources).

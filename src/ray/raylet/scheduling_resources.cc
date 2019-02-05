@@ -73,6 +73,11 @@ bool ResourceSet::AddResource(const std::string &resource_name, double capacity)
   return true;
 }
 
+bool ResourceSet::DeleteResource(const std::string &resource_name) {
+  resource_capacity_.erase(resource_name);
+  return true;
+}
+
 bool ResourceSet::RemoveResource(const std::string &resource_name) {
   throw std::runtime_error("Method not implemented");
 }
@@ -605,12 +610,43 @@ const ResourceSet &SchedulingResources::GetLoadResources() const {
 
 // Return specified resources back to SchedulingResources.
 bool SchedulingResources::Release(const ResourceSet &resources) {
+  //todo(romilb): Modify this to be careful to not exceed resources_total capacity, and not to worry if resource does not exist anymore
   return resources_available_.AddResourcesStrict(resources);
 }
 
 // Take specified resources from SchedulingResources.
 bool SchedulingResources::Acquire(const ResourceSet &resources) {
   return resources_available_.SubtractResourcesStrict(resources);
+}
+
+void SchedulingResources::UpdateResource(std::string resource_name, double capacity){
+  double *current_capacity = NULL;
+  bool resource_exists = resources_total_.GetResource(resource_name, current_capacity);
+  if (resource_exists){
+      // If it's an increment in capacity, add to total and available resources
+      resources_total_.AddResource(resource_name, capacity);
+
+      double capacity_difference = capacity - *current_capacity;
+      double *current_avail_capacity = NULL;
+      resources_available_.GetResource(resource_name, current_avail_capacity);
+      double new_avail_capacity = *current_avail_capacity + capacity_difference;
+      if (new_avail_capacity < 0){
+        new_avail_capacity = 0;
+      }
+      resources_available_.AddResource(resource_name, new_avail_capacity);
+  }
+  else{
+    // Resource does not exist, just add it to total, available, and set load to 0
+    resources_total_.AddResource(resource_name, capacity);
+    resources_available_.AddResource(resource_name, capacity);
+    resources_load_.AddResource(resource_name, 0);
+  }
+}
+
+void SchedulingResources::DeleteResource(std::string resource_name){
+  resources_total_.DeleteResource(resource_name);
+  resources_available_.DeleteResource(resource_name);
+  resources_load_.DeleteResource(resource_name);
 }
 
 std::string SchedulingResources::DebugString() const {

@@ -460,14 +460,39 @@ void NodeManager::ResourceCreateUpdated(const ClientTableDataT &client_data) {
   ResourceSet difference_set = old_res_set.FindUpdatedResources(new_res_set);
   RAY_LOG(DEBUG) << "[ResourceCreateUpdated] The difference in the resource map is " << difference_set.ToString();
 
-  // Update local_available_resources_
+  SchedulingResources &cluster_schedres = cluster_resource_map_[client_id];
+
+  // Update local_available_resources_ and SchedulingResources
   for (const auto &resource_pair : difference_set.GetResourceMap()) {
     const std::string &resource_label = resource_pair.first;
     const double &new_resource_capacity = resource_pair.second;
     local_available_resources_.CreateResource(resource_label, new_resource_capacity);
+    cluster_schedres.UpdateResource(resource_label, new_resource_capacity);
   }
-  RAY_LOG(DEBUG) << "[ResourceCreateUpdated] Updated local_available_resources, now writing cluster_resource_map.";
-  cluster_resource_map_[client_id] = SchedulingResources(new_res_set);
+  RAY_LOG(DEBUG) << "[ResourceCreateUpdated] Updated local_available_resources and cluster_resource_map.";
+
+  const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
+  if (local_client_id == client_id){
+    // The resource update is on the local node, check if we can reschedule tasks.
+    // todo(romilb): This is code copy pasted from HeartbeatAdded - make this a function.
+    RAY_LOG(DEBUG) << "[ResourceCreateUpdated] The resource update is on the local node, check if we can reschedule tasks";
+    auto decision = scheduling_policy_.LocalResourcesChanged(cluster_schedres);
+    for (const auto &task_id : decision) {
+      // (See design_docs/task_states.rst for the state transition diagram.)
+      TaskState state;
+      const auto task = local_queues_.RemoveTask(task_id, &state);
+      // Since we are spilling back from the ready and waiting queues, we need
+      // to unsubscribe the dependencies.
+      if (state != TaskState::INFEASIBLE) {
+        // Don't unsubscribe for infeasible tasks because we never subscribed in
+        // the first place.
+        RAY_CHECK(task_dependency_manager_.UnsubscribeDependencies(task_id));
+      }
+      // Attempt to forward the task. If this fails to forward the task,
+      // the task will be resubmit locally.
+      ForwardTaskOrResubmit(task, client_id);
+    }
+  }
   return;
 }
 
@@ -482,12 +507,38 @@ void NodeManager::ResourceDeleted(const ClientTableDataT &client_data) {
   ResourceSet deleted_set = old_res_set.FindDeletedResources(new_res_set);
   RAY_LOG(DEBUG) << "[ResourceDeleted] The difference in the resource map is " << deleted_set.ToString();
 
-  // Update local_available_resources_
+  SchedulingResources &cluster_schedres = cluster_resource_map_[client_id];
+
+  // Update local_available_resources_ and SchedulingResources
   for (const auto &resource_pair : deleted_set.GetResourceMap()) {
     const std::string &resource_label = resource_pair.first;
     local_available_resources_.DeleteResource(resource_label);
+    cluster_schedres.DeleteResource(resource_label);
   }
-  cluster_resource_map_[client_id] = SchedulingResources(new_res_set);
+  RAY_LOG(DEBUG) << "[ResourceDeleted] Updated local_available_resources and cluster_resource_map.";
+
+  const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
+  if (local_client_id == client_id){
+    // The resource update is on the local node, check if we can reschedule tasks.
+    // todo(romilb): This is code copy pasted from HeartbeatAdded - make this a function.
+    RAY_LOG(DEBUG) << "[ResourceDeleted] The resource delete is on the local node, check if we can reschedule tasks";
+    auto decision = scheduling_policy_.LocalResourcesChanged(cluster_schedres);
+    for (const auto &task_id : decision) {
+      // (See design_docs/task_states.rst for the state transition diagram.)
+      TaskState state;
+      const auto task = local_queues_.RemoveTask(task_id, &state);
+      // Since we are spilling back from the ready and waiting queues, we need
+      // to unsubscribe the dependencies.
+      if (state != TaskState::INFEASIBLE) {
+        // Don't unsubscribe for infeasible tasks because we never subscribed in
+        // the first place.
+        RAY_CHECK(task_dependency_manager_.UnsubscribeDependencies(task_id));
+      }
+      // Attempt to forward the task. If this fails to forward the task,
+      // the task will be resubmit locally.
+      ForwardTaskOrResubmit(task, client_id);
+    }
+  }
   return;
 }
 
@@ -1206,7 +1257,7 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
   // Set the correct flag for entry_type
   data.entry_type = EntryType::RES_CREATEUPDATE;
 
-  // Submit to the client table. This calls the clientAdded callback, which updates cluster_resource_map_.
+  // Submit to the client table. This calls the ResourceCreateUpdated callback, which updates cluster_resource_map_.
   std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
   if (not worker){
       worker = worker_pool_.GetRegisteredDriver(client);
@@ -1238,7 +1289,7 @@ void NodeManager::ProcessDeleteResourceRequest(const std::shared_ptr<LocalClient
   // Set the correct flag for entry_type
   data.entry_type = EntryType::RES_DELETE;
 
-  // Submit to the client table. This calls the clientAdded callback, which updates cluster_resource_map_.
+  // Submit to the client table. This calls the ResourceDeleted callback, which updates cluster_resource_map_.
   std::shared_ptr<Worker> worker = worker_pool_.GetRegisteredWorker(client);
   if (not worker){
     worker = worker_pool_.GetRegisteredDriver(client);
