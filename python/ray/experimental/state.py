@@ -419,7 +419,73 @@ class GlobalState(object):
         """
         self._check_connected()
 
-        return parse_client_table(self.redis_client)
+        NIL_CLIENT_ID = ray_constants.ID_SIZE * b"\xff"
+        message = self.redis_client.execute_command(
+            "RAY.TABLE_LOOKUP", ray.gcs_utils.TablePrefix.CLIENT, "",
+            NIL_CLIENT_ID)
+
+        # Handle the case where no clients are returned. This should only
+        # occur potentially immediately after the cluster is started.
+        if message is None:
+            return []
+
+        node_info = {}
+        gcs_entry = ray.gcs_utils.GcsTableEntry.GetRootAsGcsTableEntry(
+            message, 0)
+
+        # Since GCS entries are append-only, we override so that
+        # only the latest entries are kept.
+        for i in range(gcs_entry.EntriesLength()):
+            client = (ray.gcs_utils.ClientTableData.GetRootAsClientTableData(
+                gcs_entry.Entries(i), 0))
+
+            resources = {
+                decode(client.ResourcesTotalLabel(i)):
+                client.ResourcesTotalCapacity(i)
+                for i in range(client.ResourcesTotalLabelLength())
+            }
+            client_id = ray.utils.binary_to_hex(client.ClientId())
+
+            # If this client is being removed, then it must
+            # have previously been inserted, and
+            # it cannot have previously been removed.
+            if client.EntryType() == EntryType.DELETION:
+                assert client_id in node_info, "Client removed not found!"
+                assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
+                    "Unexpected duplicate removal of client.")
+
+            # If this table entry is a resource create update or delete, update the local resource map
+            elif client.EntryType() == EntryType.RES_CREATEUPDATE:
+                assert client_id in node_info, "Client not found!"
+                assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
+                    "Unexpected removal of client before resource updation.")
+                res_map = node_info[client_id]["Resources"]
+                for res in resources:
+                    res_map[res] = resources[res]
+                node_info[client_id]["Resources"] = res_map
+
+            elif client.EntryType() == EntryType.RES_DELETE:
+                assert client_id in node_info, "Client not found!"
+                assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
+                    "Unexpected removal of client before resource deletion.")
+                res_map = node_info[client_id]["Resources"]
+                for res in resources:
+                    res_map.pop(res, None)
+                node_info[client_id]["Resources"] = res_map
+
+            else:
+                node_info[client_id] = {
+                    "ClientID": client_id,
+                    "EntryType": client.EntryType(),
+                    "NodeManagerAddress": decode(client.NodeManagerAddress()),
+                    "NodeManagerPort": client.NodeManagerPort(),
+                    "ObjectManagerPort": client.ObjectManagerPort(),
+                    "ObjectStoreSocketName": decode(
+                        client.ObjectStoreSocketName()),
+                    "RayletSocketName": decode(client.RayletSocketName()),
+                    "Resources": resources
+                }
+        return list(node_info.values())
 
     def client_table_debug(self):
         """Fetch and parse the Redis DB client table.
@@ -806,21 +872,18 @@ class GlobalState(object):
         """
         resources = defaultdict(int)
         clients = self.client_table()
-        # TODO(romilb): This needs to be fixed to reflect the correct resource status by picking only the latest
-        # client entry in the log. Currently it includes resources from stale client entries.
         for client in clients:
             # Only count resources from latest entries of live clients.
-            if client["IsInsertion"]:
+            if client["EntryType"] != EntryType.DELETION:
                 for key, value in client["Resources"].items():
                     resources[key] += value
-
         return dict(resources)
 
     def _live_client_ids(self):
         """Returns a set of client IDs corresponding to clients still alive."""
         return {
             client["ClientID"]
-            for client in self.client_table() if client["IsInsertion"]
+            for client in self.client_table() if (client["EntryType"] != EntryType.DELETION)
         }
 
     def available_resources(self):

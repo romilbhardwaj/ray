@@ -307,7 +307,7 @@ class ResourceIdSet {
   ///
   /// \param resource_id_set The resource IDs to return.
   /// \return Void.
-  void Release(const ResourceIdSet &resource_id_set, bool strict=true);
+  void Release(const ResourceIdSet &resource_id_set, bool strict=false);
 
   /// \brief Clear out all of the resource IDs.
   ///

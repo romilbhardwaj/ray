@@ -454,7 +454,7 @@ void ResourceIdSet::Release(const ray::raylet::ResourceIdSet &resource_id_set, b
 
     auto it = available_resources_.find(resource_name);
     if (it == available_resources_.end()) {
-      if (strict==true){
+      if (strict==false){
         // Resource not found in ResourceIdSet. This happens when a resource was acquired,
         // got deleted by resource deletion call and later got released by a task. In this case, do nothing
       }
@@ -473,7 +473,7 @@ void ResourceIdSet::Clear() { available_resources_.clear(); }
 
 ResourceIdSet ResourceIdSet::Plus(const ResourceIdSet &resource_id_set) const {
   ResourceIdSet resource_id_set_to_return(available_resources_);
-  resource_id_set_to_return.Release(resource_id_set, false);
+  resource_id_set_to_return.Release(resource_id_set, true);
   return resource_id_set_to_return;
 }
 
@@ -620,19 +620,18 @@ bool SchedulingResources::Acquire(const ResourceSet &resources) {
 }
 
 void SchedulingResources::UpdateResource(std::string resource_name, double capacity){
-  double *current_capacity = NULL;
-  bool resource_exists = resources_total_.GetResource(resource_name, current_capacity);
+  double current_capacity = 0;
+  bool resource_exists = resources_total_.GetResource(resource_name, &current_capacity);
   if (resource_exists){
-      // If it's an increment in capacity, add to total and available resources
-      resources_total_.AddResource(resource_name, capacity);
-
-      double capacity_difference = capacity - *current_capacity;
-      double *current_avail_capacity = NULL;
-      resources_available_.GetResource(resource_name, current_avail_capacity);
-      double new_avail_capacity = *current_avail_capacity + capacity_difference;
+      // If the resource exists, add to total and available resources
+      double capacity_difference = capacity - current_capacity;
+      double current_avail_capacity = 0;
+      resources_available_.GetResource(resource_name, &current_avail_capacity);
+      double new_avail_capacity = current_avail_capacity + capacity_difference;
       if (new_avail_capacity < 0){
         new_avail_capacity = 0;
       }
+      resources_total_.AddResource(resource_name, capacity);
       resources_available_.AddResource(resource_name, new_avail_capacity);
   }
   else{
