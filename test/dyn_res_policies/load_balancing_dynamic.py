@@ -4,7 +4,7 @@ import ray
 import time
 import ray.test.cluster_utils
 
-# This example demonstrates load_balancing where the number of tasks and nodes are fixed and known at the start
+# This example demonstrates load_balancing where the number of tasks and nodes are not known at the start - tasks may arrive dynamically.
 NUM_NODES = 2
 NUM_TASKS = 10
 NODE_INIT_RESOURCES = {"CPU": 100} # So we're not bottlenecked by CPU

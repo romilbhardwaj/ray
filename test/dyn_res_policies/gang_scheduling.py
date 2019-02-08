@@ -4,7 +4,7 @@ import ray
 import time
 import ray.test.cluster_utils
 
-# This example demonstrates load_balancing where the number of tasks and nodes are fixed and known at the start
+# This example demonstrates gang scheduling by making sure that either all jobs complete, and if a node fails then all jobs are terminated.
 NUM_NODES = 2
 GANG_SIZE = 7
 NODE_INIT_RESOURCES = {"CPU": 100} # So we're not bottlenecked by CPU
