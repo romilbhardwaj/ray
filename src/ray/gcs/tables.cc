@@ -397,12 +397,10 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
       for(std::vector<int>::size_type i = 0; i != data.resources_total_label.size(); i++) {
         auto const &resource_name = data.resources_total_label[i];
 
-        RAY_LOG(DEBUG) << "Resources in the notification: " << resource_name;
         // If resource exists in the ClientTableData, delete it
         auto existing_resource_label = std::find(cache_data.resources_total_label.begin(), cache_data.resources_total_label.end(), resource_name);
         if ( existing_resource_label != cache_data.resources_total_label.end()){
           // Resource exists, delete
-          RAY_LOG(DEBUG) << "Resources exists in cache_data: " << resource_name;
           auto index = std::distance(cache_data.resources_total_label.begin(), existing_resource_label);
           cache_data.resources_total_label.erase(cache_data.resources_total_label.begin()+index);
           cache_data.resources_total_capacity.erase(cache_data.resources_total_capacity.begin()+index);
@@ -413,11 +411,6 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
 
     //todo(romilb): Fix this to be instantiated only once above.
   ClientTableDataT& cache_data = client_cache_[client_id];
-
-  for(std::vector<int>::size_type i = 0; i != cache_data.resources_total_label.size(); i++) {
-    auto const &resource_name = cache_data.resources_total_label[i];
-    RAY_LOG(DEBUG) << "Resources in cache_data: " << resource_name;
-  }
 
   // If the notification is new, call any registered callbacks.
   if (is_notif_new || is_res_modified) {
