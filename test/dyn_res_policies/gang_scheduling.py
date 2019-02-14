@@ -7,7 +7,7 @@ import ray.test.cluster_utils
 # This example demonstrates gang scheduling by making sure that either all jobs complete, and if a node fails then all jobs are terminated.
 NUM_NODES = 2
 GANG_SIZE = 7
-NODE_INIT_RESOURCES = {"CPU": 100} # So we're not bottlenecked by CPU
+NODE_INIT_RESOURCES = {"CPU": 16} # So we're not bottlenecked by CPU
 
 nodes = []
 
@@ -62,8 +62,9 @@ while len(ready_ids) != GANG_SIZE:
     if my_gang_resources < GANG_SIZE:
         raise Exception("My_gang resource size dropped! Some node probably died. At this point, the application would handle this exception and either kill all tasks or restart with new resources")
     i+=1
-    if i==3:
-        cluster.remove_node(nodes[1])
+    # Uncomment these lines to simulate failure at iteration 3.
+    # if i==3:
+    #     cluster.remove_node(nodes[1])
 
 print("Gang completed. Getting task results.")
 res = ray.get(task_ids)

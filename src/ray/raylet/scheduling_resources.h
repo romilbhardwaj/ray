@@ -93,6 +93,13 @@ class ResourceSet {
   /// \return True if the resource set was added successfully. False otherwise.
   bool AddResourcesStrict(const ResourceSet &other);
 
+  /// \brief Add a set of resources to the current set of resources subject to upper limits on capacity from the total_resource set.
+  ///
+  /// \param other: The other resource set to add.
+  /// \param total_resources: Total resource set which sets upper limits on capacity for each label.
+  /// \return True if the resource set was added successfully. False otherwise.
+  bool AddResourcesCapacityConstrained(const ResourceSet &other, const ResourceSet &total_resources);
+
   /// \brief Aggregate resources from the other set into this set, adding any missing
   /// resource labels to this set.
   ///
@@ -107,6 +114,15 @@ class ResourceSet {
   /// \return True if the resource set was subtracted successfully.
   /// False otherwise.
   bool SubtractResourcesStrict(const ResourceSet &other);
+
+  /// \brief Subtract a set of resources from the current set of resources, only if
+  /// resource labels match.
+  ///
+  /// \param other: The resource set to subtract from the current resource set.
+  /// \param delete_zero_capacity: Delete the resource from the ResourceSet if the new capacity is zero.
+  /// \return True if the resource set was subtracted successfully.
+  /// False otherwise.
+  bool SubtractResourcesStrict(const ResourceSet &other, bool delete_zero_capacity);
 
   /// \brief Finds new resources created or updated in a new set.
   ///
@@ -269,6 +285,8 @@ class ResourceIds {
   double greatest_id_;
   /// A double to track the total capacity of the resource, since the whole_ids_ vector keeps changing
   double total_capacity_;
+  /// A double to track any pending decrements in capacity that weren't executed because of insufficient available resources. This backlog in cleared in the release method.
+  double decrement_backlog_;
 };
 
 /// \class ResourceIdSet

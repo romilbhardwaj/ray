@@ -6,7 +6,7 @@ import ray.test.cluster_utils
 
 # This example demonstrates co-location by creating a resource where the first task lands.
 NUM_NODES = 3
-NODE_INIT_RESOURCES = {"CPU": 100} # So we're not bottlenecked by CPU
+NODE_INIT_RESOURCES = {"CPU": 16} # So we're not bottlenecked by CPU
 
 # Initialize cluster
 print("Initializing cluster..")

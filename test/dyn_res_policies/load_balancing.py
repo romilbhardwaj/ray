@@ -5,9 +5,9 @@ import time
 import ray.test.cluster_utils
 
 # This example demonstrates load_balancing where the number of tasks and nodes are fixed and known at the start
-NUM_NODES = 3
-NUM_TASKS = 6
-NODE_INIT_RESOURCES = {"CPU": 100} # So we're not bottlenecked by CPU
+NUM_NODES = 2
+NUM_TASKS = 4
+NODE_INIT_RESOURCES = {"CPU": 16} # So we're not bottlenecked by CPU
 
 # Initialize cluster
 print("Initializing cluster..")
@@ -35,15 +35,18 @@ for client_id in client_ids:
 def long_task(task_id):
     print("Running %d" % task_id)
     time.sleep(10)
-    return str(ray.get_resource_ids())
+    return str(ray.worker.global_worker.plasma_client.store_socket_name)
 
-# Now we want to run 3 instances of long_task, spread across the three nodes.
+# Now we want to run NUM_TASKS instances of long_task, spread across the three nodes.
 # Simply specify resource load_balancer as a requirement and submit
 print("Launching tasks")
 task_results = []
+start_time = time.time()
 for i in range(0, NUM_TASKS):
     task_results.append(long_task._remote(args=[i], resources={"load_balancer": 1}))
 
 print("Getting task results")
 res = ray.get(task_results)
+end_time = time.time()
 print("Results " + str(res))
+print("Time taken = " + str(end_time-start_time))

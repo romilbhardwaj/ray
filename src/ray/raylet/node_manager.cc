@@ -499,9 +499,9 @@ void NodeManager::ResourceCreateUpdated(const ClientTableDataT &client_data) {
 void NodeManager::ResourceDeleted(const ClientTableDataT &client_data) {
   //TODO(romilb): This callback is the same as resource deleted since it the cache has already updated client_data. Can we remove this?
   const ClientID client_id = ClientID::from_binary(client_data.client_id);
-  RAY_LOG(DEBUG) << "[ResourceDeleted] received callback from client id " << client_id << ". Updating resource map.";
   ResourceSet new_res_set(client_data.resources_total_label,
                               client_data.resources_total_capacity);
+  RAY_LOG(DEBUG) << "[ResourceDeleted] received callback from client id " << client_id << " with new resources: " << new_res_set.ToString() <<  ". Updating resource map.";
 
   const ResourceSet &old_res_set = cluster_resource_map_[client_id].GetTotalResources();
   ResourceSet deleted_set = old_res_set.FindDeletedResources(new_res_set);
@@ -516,6 +516,10 @@ void NodeManager::ResourceDeleted(const ClientTableDataT &client_data) {
     cluster_schedres.DeleteResource(resource_label);
   }
   RAY_LOG(DEBUG) << "[ResourceDeleted] Updated local_available_resources and cluster_resource_map.";
+  RAY_LOG(DEBUG) << "[ResourceDeleted] Cluster resource map for client_id " << client_id << " is "
+  << "\nTotal res: " << cluster_resource_map_[client_id].GetTotalResources().ToString()
+  << "\nAvail res: " << cluster_resource_map_[client_id].GetAvailableResources().ToString()
+  << "\nLoad res: " << cluster_resource_map_[client_id].GetLoadResources().ToString();
 
   const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
   if (local_client_id == client_id){
@@ -1279,6 +1283,11 @@ void NodeManager::ProcessDeleteResourceRequest(const std::shared_ptr<LocalClient
     client_id = gcs_client_->client_table().GetLocalClientId();
   }
 
+  if (cluster_resource_map_[client_id].GetTotalResources().GetResourceMap().count(resource_name) == 0){
+    // Resource does not exist in the cluster resource map, thus nothing to delete. Return..
+    RAY_LOG(INFO) << "[ProcessDeleteResourceRequest] Resource " << resource_name << "does not exist. Doing nothing..";
+    return;
+  }
 
   // Add the new resource to a skeleton ClientTableDataT object
   ClientTableDataT data;

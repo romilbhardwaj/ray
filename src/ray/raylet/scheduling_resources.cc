@@ -98,6 +98,27 @@ bool ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
   return !oversubscribed;
 }
 
+
+bool ResourceSet::SubtractResourcesStrict(const ResourceSet &other, bool delete_zero_capacity) {
+  // Subtract the resources and track whether a resource goes below zero.
+  bool oversubscribed = false;
+  for (const auto &resource_pair : other.GetResourceMap()) {
+    const std::string &resource_label = resource_pair.first;
+    const double &resource_capacity = resource_pair.second;
+    RAY_CHECK(resource_capacity_.count(resource_label) == 1)
+    << "Attempt to acquire unknown resource: " << resource_label;
+    resource_capacity_[resource_label] -= resource_capacity;
+    if (resource_capacity_[resource_label] < 0) {
+      oversubscribed = true;
+    }
+    if (resource_capacity_[resource_label] == 0) {
+      resource_capacity_.erase(resource_label);
+    }
+  }
+  return !oversubscribed;
+}
+
+
 // Perform a left join.
 bool ResourceSet::AddResourcesStrict(const ResourceSet &other) {
   // Return failure if attempting to perform vector addition with unknown labels.
@@ -106,6 +127,31 @@ bool ResourceSet::AddResourcesStrict(const ResourceSet &other) {
     const double &resource_capacity = resource_pair.second;
     RAY_CHECK(resource_capacity_.count(resource_label) != 0);
     resource_capacity_[resource_label] += resource_capacity;
+  }
+  return true;
+}
+
+// Add a set of resources to the current set of resources subject to upper limits on capacity from the total_resource set
+bool ResourceSet::AddResourcesCapacityConstrained(const ResourceSet &other, const ResourceSet &total_resources) {
+  const std::unordered_map<std::string, double> total_resource_map = total_resources.GetResourceMap();
+  for (const auto &resource_pair : other.GetResourceMap()) {
+    const std::string &to_add_resource_label = resource_pair.first;
+    const double &to_add_resource_capacity = resource_pair.second;
+    if (total_resource_map.count(to_add_resource_label) != 0){
+      // If resource exists in total map, add to the local capacity map
+      double total_capacity = total_resource_map.at(to_add_resource_label);
+      if ((resource_capacity_[to_add_resource_label] + to_add_resource_capacity) > total_capacity){
+        // If the new capacity will be greater the total capacity, set the new capacity to total capacity (capping to the total)
+        resource_capacity_[to_add_resource_label] = total_capacity;
+      }
+      else{
+        // Otherwise it's a safe add, go ahead.
+        resource_capacity_[to_add_resource_label] += to_add_resource_capacity;
+      }
+    }
+    else {
+      // Resource does not exist in the total map, it probably got deleted from the total. Don't panic, do nothing and simply continue.
+    }
   }
   return true;
 }
@@ -215,9 +261,14 @@ ResourceIds::ResourceIds(double resource_quantity) {
   }
   greatest_id_ = resource_quantity;
   total_capacity_ = TotalQuantity();
+  decrement_backlog_ = 0;
 }
 
-ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids) : whole_ids_(whole_ids), total_capacity_(whole_ids.size()) {}
+ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids)
+    : whole_ids_(whole_ids),
+    greatest_id_(*std::max_element(whole_ids.begin(), whole_ids.end())),
+    total_capacity_(whole_ids.size()),
+    decrement_backlog_(0){}
 
 ResourceIds::ResourceIds(const std::vector<std::pair<int64_t, double>> &fractional_ids){
   fractional_ids_ = fractional_ids;
@@ -226,6 +277,7 @@ ResourceIds::ResourceIds(const std::vector<std::pair<int64_t, double>> &fraction
   const auto &max = p.second->first;
   greatest_id_ = max;
   total_capacity_ = TotalQuantity();
+  decrement_backlog_ = 0;
 }
 
 ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids,
@@ -233,7 +285,8 @@ ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids,
     : whole_ids_(whole_ids),
     fractional_ids_(fractional_ids),
     greatest_id_(*std::max_element(whole_ids.begin(), whole_ids.end())),
-    total_capacity_(TotalQuantity()){}
+    total_capacity_(TotalQuantity()),
+    decrement_backlog_(0){}
 
 bool ResourceIds::Contains(double resource_quantity) const {
   RAY_CHECK(resource_quantity >= 0);
@@ -295,9 +348,17 @@ ResourceIds ResourceIds::Acquire(double resource_quantity) {
 void ResourceIds::Release(const ResourceIds &resource_ids) {
   auto const &whole_ids_to_return = resource_ids.WholeIds();
 
-  // Return the whole IDs.
-  whole_ids_.insert(whole_ids_.end(), whole_ids_to_return.begin(),
-                    whole_ids_to_return.end());
+  double return_resource_count = whole_ids_to_return.size();
+  if (return_resource_count > decrement_backlog_){
+    // We are returning more resources than in the decrement backlog, thus set the backlog to zero and insert count - decrement_backlog resources.
+    whole_ids_.insert(whole_ids_.end(), whole_ids_to_return.begin()+decrement_backlog_,
+                      whole_ids_to_return.end());
+    decrement_backlog_ = 0;
+  }
+  else{
+    //Do not insert back to whole_ids_. Instead just decrement backlog by the return count
+    decrement_backlog_ -= return_resource_count;
+  }
 
   // Return the fractional IDs.
   auto const &fractional_ids_to_return = resource_ids.FractionalIds();
@@ -359,6 +420,8 @@ std::string ResourceIds::ToString() const {
 
 
 void ResourceIds::UpdateCapacity(double new_capacity) {
+  // Assert the new capacity is positive for sanity
+  RAY_CHECK(new_capacity >= 0);
   double capacity_delta = new_capacity - total_capacity_;
   if (capacity_delta < 0) {
     DecreaseCapacity(-1*capacity_delta);
@@ -376,11 +439,22 @@ void ResourceIds::IncreaseCapacity(double increment_quantity) {
 }
 
 void ResourceIds::DecreaseCapacity(double decrement_quantity) {
-  if (TotalQuantity() < decrement_quantity){
-    throw "You're requesting deletion of more resources than are available. Not implemented yet!";
+  double available_quantity = TotalQuantity();
+  RAY_LOG(DEBUG) << "[DecreaseCapacity] Available quanitity :  " << available_quantity;
+
+  if (available_quantity < decrement_quantity){
+    RAY_LOG(DEBUG) << "[DecreaseCapacity] Available quanitity < decrement quantity  " << decrement_quantity;
+    // We're trying to remove more resources than are available
+    // In this case, add the difference to the decrement backlog, and when resources are released the backlog will be cleared
+    decrement_backlog_ += (decrement_quantity - available_quantity);
+    // To decrease capacity, just acquire resources and forget about them. They are popped from whole_ids when acquired.
+    Acquire(available_quantity);
   }
-  // To decrease capacity, just acquire resources and forget about them. They are popped from whole_ids when acquired.
-  Acquire(decrement_quantity);
+  else{
+    RAY_LOG(DEBUG) << "[DecreaseCapacity] Available quanitity > decrement quantity  " << decrement_quantity;
+    // Simply acquire resources if sufficient are available
+    Acquire(decrement_quantity);
+  }
   total_capacity_ -= decrement_quantity;
 }
 
@@ -610,8 +684,26 @@ const ResourceSet &SchedulingResources::GetLoadResources() const {
 
 // Return specified resources back to SchedulingResources.
 bool SchedulingResources::Release(const ResourceSet &resources) {
-  //todo(romilb): Modify this to be careful to not exceed resources_total capacity, and not to worry if resource does not exist anymore
-  return resources_available_.AddResourcesStrict(resources);
+  bool avail_status = resources_available_.AddResourcesCapacityConstrained(resources, resources_total_);
+//  //todo(romilb): Do we neeed to update load here.
+//  for (const auto &resource_pair : resources) {
+//    const std::string &resource_label = resource_pair.first;
+//    const double &release_capacity = resource_pair.second;
+//
+//    double release_capacity = 0;
+//    bool resource_exists = resources_load_.GetResource(resource_label, &release_capacity);
+//    if (resource_exists){
+//      double new_load = resource_load - release_capacity;
+//      if (new_load <= 0){
+//        // if releasing more than the load, then delete from load map
+//        resources_load_.DeleteResource(resource_label);
+//      }
+//      else{
+//        resources_load_.AddResource(resource_label, new_load) // Update operation.
+//      }
+//    }
+//
+  return avail_status;
 }
 
 // Take specified resources from SchedulingResources.
