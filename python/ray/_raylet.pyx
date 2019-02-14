@@ -330,6 +330,12 @@ cdef class RayletClient:
     def notify_actor_resumed_from_checkpoint(self, ActorID actor_id, ActorCheckpointID checkpoint_id):
         check_status(self.client.get().NotifyActorResumedFromCheckpoint(actor_id.data, checkpoint_id.data))
 
+    def create_resource(self, str resource_name, double capacity, ClientID client_id):
+        self.client.CreateResource(resource_name, capacity, client_id)
+
+    def delete_resource(self, str resource_name, double capacity, ClientID client_id):
+        self.client.DeleteResource(resource_name, capacity, client_id)
+
     @property
     def language(self):
         return Language.from_native(self.client.get().GetLanguage())
