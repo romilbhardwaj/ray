@@ -159,7 +159,7 @@ std::vector<TaskID> SchedulingPolicy::LocalResourcesChanged(
   ResourceSet new_load(local_scheduling_resources.GetLoadResources());
 
   // Check if we can accommodate infeasible tasks.
-  for (const auto &task : scheduling_queue_.GetInfeasibleTasks()) {
+  for (const auto &task : scheduling_queue_.GetTasks(TaskState::INFEASIBLE)) {
     const auto &spec = task.GetTaskSpecification();
     const auto &placement_resources = spec.GetRequiredPlacementResources();
     if (placement_resources.IsSubset(local_scheduling_resources.GetTotalResources())) {

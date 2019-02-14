@@ -13,10 +13,10 @@ def create_resource(resource_name, capacity, client_id=None):
     :return: None
     """
     if client_id != None:
-        client_id = ray.utils.hex_to_binary(client_id)
+        client_id_obj = ray.ClientID(ray.utils.hex_to_binary(client_id))
     else:
-        client_id = ray.ObjectID.nil().binary()
-    return ray.worker.global_worker.raylet_client.create_resource(resource_name, capacity, client_id)      #TODO(romilb): Should this return none when client id not exist?
+        client_id_obj = ray.ClientID.nil()
+    return ray.worker.global_worker.raylet_client.create_resource(resource_name, capacity, client_id_obj)      #TODO(romilb): Should this return none when client id not exist?
 
 
 def delete_resource(resource_name, client_id=None):
@@ -30,7 +30,7 @@ def delete_resource(resource_name, client_id=None):
     :return: None
     """
     if client_id != None:
-        client_id = ray.utils.hex_to_binary(client_id)
+        client_id_obj = ray.ClientID(ray.utils.hex_to_binary(client_id))
     else:
-        client_id = ray.ObjectID.nil().binary()
-    return ray.worker.global_worker.raylet_client.delete_resource(resource_name, client_id)
+        client_id_obj = ray.ClientID.nil()
+    return ray.worker.global_worker.raylet_client.delete_resource(resource_name, client_id_obj)

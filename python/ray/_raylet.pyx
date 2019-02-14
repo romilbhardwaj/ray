@@ -331,10 +331,10 @@ cdef class RayletClient:
         check_status(self.client.get().NotifyActorResumedFromCheckpoint(actor_id.data, checkpoint_id.data))
 
     def create_resource(self, str resource_name, double capacity, ClientID client_id):
-        self.client.CreateResource(resource_name, capacity, client_id)
+        self.client.get().CreateResource(resource_name.encode("ascii"), capacity, client_id.data)
 
-    def delete_resource(self, str resource_name, double capacity, ClientID client_id):
-        self.client.DeleteResource(resource_name, capacity, client_id)
+    def delete_resource(self, str resource_name, ClientID client_id):
+        self.client.get().DeleteResource(resource_name.encode("ascii"), client_id.data)
 
     @property
     def language(self):
