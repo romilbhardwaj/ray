@@ -2797,6 +2797,28 @@ def test_dynamic_res_deletion(shutdown_only):
 
     assert res_name not in available_res
 
+def test_dynamic_res_infeasible_rescheduling(ray_start):
+    # This test launches an infeasible task and then creates a resource to make the task feasible.
+    # This tests if the infeasible tasks get rescheduled when resources are created at runtime.
+    res_name = "test_res"
+    res_capacity = 1.0
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity):
+        ray.experimental.create_resource(resource_name, resource_capacity)
+
+    @ray.remote
+    def f():
+        return 1
+    task = f._remote(args=[], resources={res_name: res_capacity})   # This is infeasible
+    ray.get(create_res.remote(res_name, res_capacity))              # Now should be feasible
+
+    available_res = ray.global_state.available_resources()
+    assert available_res[res_name] == res_capacity
+
+    successful, unsuccessful = ray.wait([task], timeout=1)
+    assert successful   # The task completed
+
 def test_dynamic_res_updation_clientid(ray_start_cluster):
     # This test updates the resource capacity on a node
     cluster = ray_start_cluster

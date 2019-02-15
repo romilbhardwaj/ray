@@ -128,6 +128,11 @@ class NodeManager {
   /// \return Void.
   void ResourceDeleted(const ClientTableDataT &client_data);
 
+  /// Evaluates the local infeasible queue to check if any tasks can be scheduled.
+  /// This is called whenever there's an update to the resources on the local client.
+  /// \return Void.
+  void TryLocalInfeasibleTaskScheduling();
+
   /// Send heartbeats to the GCS.
   void Heartbeat();
 

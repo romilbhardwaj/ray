@@ -8,7 +8,7 @@ def create_resource(resource_name, capacity, client_id=None):
     :type str
     :param capacity: Capacity of the new resource.
     :type float
-    :param client_id:
+    :param client_id: ClientId where the resource is to be created or updated.
     :type str
     :return: None
     """
@@ -16,7 +16,7 @@ def create_resource(resource_name, capacity, client_id=None):
         client_id_obj = ray.ClientID(ray.utils.hex_to_binary(client_id))
     else:
         client_id_obj = ray.ClientID.nil()
-    return ray.worker.global_worker.raylet_client.create_resource(resource_name, capacity, client_id_obj)      #TODO(romilb): Should this return none when client id not exist?
+    return ray.worker.global_worker.raylet_client.create_resource(resource_name, capacity, client_id_obj)
 
 
 def delete_resource(resource_name, client_id=None):
@@ -25,7 +25,7 @@ def delete_resource(resource_name, client_id=None):
     If ClientID is not specified or set to None, the resource is deleted on the local client where the actor is running.
     :param resource_name: Name of the resource to be deleted
     :type str
-    :param client_id:
+    :param client_id: ClientId where the resource is to be created or deleted.
     :type str
     :return: None
     """

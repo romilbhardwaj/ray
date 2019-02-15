@@ -261,7 +261,7 @@ class ResourceIds {
   /// \return Void.
   void IncreaseCapacity(double increment_quantity);
 
-  /// \brief Decrease resource capacity by the given amount. This may throw an error if decrement is more than currently available resources.
+  /// \brief Decrease resource capacity by the given amount. Adds to the decrement backlog if more than available resources are decremented.
   ///
   /// \param decrement_quantity A double of how many unit resources to remove.
   /// \return Void.
@@ -324,6 +324,7 @@ class ResourceIdSet {
   /// \brief Return a set of resource IDs.
   ///
   /// \param resource_id_set The resource IDs to return.
+  /// \param strict If set to to true, creates any resources that do not already exist in the ResourceIdSet. Else ignores any new resources.
   /// \return Void.
   void Release(const ResourceIdSet &resource_id_set, bool strict=false);
 

@@ -303,7 +303,7 @@ void ClientTable::RegisterResourceCreateUpdatedCallback(const ClientTableCallbac
   // Call the callback for any clients that are cached.
   for (const auto &entry : client_cache_) {
     if (!entry.first.is_nil() && (entry.second.entry_type == EntryType::RES_DELETE)) {
-      resource_deleted_callback_(client_, entry.first, entry.second);
+      resource_createupdated_callback_(client_, entry.first, entry.second);
     }
   }
 }
@@ -336,7 +336,7 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
     bool is_deleted = (data.entry_type == EntryType::DELETION);
     is_notif_new = (was_not_deleted && is_deleted);
     // If the entry was modified, use a flag to ensure ClientAdded callback is still called
-    is_res_modified = was_not_deleted && ((data.entry_type == EntryType::RES_CREATEUPDATE) || (data.entry_type == EntryType::RES_DELETE)); //todo(romilb): Fix logic here.
+    is_res_modified = was_not_deleted && ((data.entry_type == EntryType::RES_CREATEUPDATE) || (data.entry_type == EntryType::RES_DELETE));
     // Once a client with a given ID has been removed, it should never be added
     // again. If the entry was in the cache and the client was deleted, check
     // that this new notification is not an insertion.
@@ -374,8 +374,8 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
       auto existing_resource_label = std::find(cache_data.resources_total_label.begin(), cache_data.resources_total_label.end(), resource_name);
       if ( existing_resource_label != cache_data.resources_total_label.end()){
         // Resource already exists, update capacity
-        auto index = std::distance(cache_data.resources_total_label.begin(), existing_resource_label);
-        cache_data.resources_total_capacity[index] = capacity;
+         auto index = std::distance(cache_data.resources_total_label.begin(), existing_resource_label);
+         cache_data.resources_total_capacity[index] = capacity;
       }
       else{
         // Resource does not exist, create resource and add capacity.
@@ -393,7 +393,7 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
                      << ". Updating the client cache with the delta from the log.";
       ClientTableDataT& cache_data = client_cache_[client_id];
 
-    // Iterate over all resources in the delete notification
+      // Iterate over all resources in the delete notification
       for(std::vector<int>::size_type i = 0; i != data.resources_total_label.size(); i++) {
         auto const &resource_name = data.resources_total_label[i];
 
@@ -409,7 +409,6 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
       }
     }
 
-    //todo(romilb): Fix this to be instantiated only once above.
   ClientTableDataT& cache_data = client_cache_[client_id];
 
   // If the notification is new, call any registered callbacks.

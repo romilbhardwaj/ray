@@ -334,7 +334,7 @@ void NodeManager::GetObjectManagerProfileInfo() {
 void NodeManager::ClientAdded(const ClientTableDataT &client_data) {
   const ClientID client_id = ClientID::from_binary(client_data.client_id);
 
-  RAY_LOG(DEBUG) << "[ClientAdded] received callback from client id " << client_id;
+  RAY_LOG(DEBUG) << "[ClientAdded] Received callback from client id " << client_id;
   if (client_id == gcs_client_->client_table().GetLocalClientId()) {
     // We got a notification for ourselves, so we are connected to the GCS now.
     // Save this NodeManager's resource information in the cluster resource map.
@@ -345,7 +345,6 @@ void NodeManager::ClientAdded(const ClientTableDataT &client_data) {
   // TODO(atumanov): make remote client lookup O(1)
   if (std::find(remote_clients_.begin(), remote_clients_.end(), client_id) ==
       remote_clients_.end()) {
-    RAY_LOG(DEBUG) << "a new client: " << client_id;
     remote_clients_.push_back(client_id);
   } else {
     // NodeManager connection to this client was already established.
@@ -453,8 +452,7 @@ void NodeManager::ClientRemoved(const ClientTableDataT &client_data) {
 void NodeManager::ResourceCreateUpdated(const ClientTableDataT &client_data) {
   const ClientID client_id = ClientID::from_binary(client_data.client_id);
   RAY_LOG(DEBUG) << "[ResourceCreateUpdated] received callback from client id " << client_id << ". Updating resource map.";
-  ResourceSet new_res_set(client_data.resources_total_label,
-                              client_data.resources_total_capacity);
+  ResourceSet new_res_set(client_data.resources_total_label, client_data.resources_total_capacity);
 
   const ResourceSet &old_res_set = cluster_resource_map_[client_id].GetTotalResources();
   ResourceSet difference_set = old_res_set.FindUpdatedResources(new_res_set);
@@ -474,24 +472,7 @@ void NodeManager::ResourceCreateUpdated(const ClientTableDataT &client_data) {
   const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
   if (local_client_id == client_id){
     // The resource update is on the local node, check if we can reschedule tasks.
-    // todo(romilb): This is code copy pasted from HeartbeatAdded - make this a function.
-    RAY_LOG(DEBUG) << "[ResourceCreateUpdated] The resource update is on the local node, check if we can reschedule tasks";
-    auto decision = scheduling_policy_.LocalResourcesChanged(cluster_schedres);
-    for (const auto &task_id : decision) {
-      // (See design_docs/task_states.rst for the state transition diagram.)
-      TaskState state;
-      const auto task = local_queues_.RemoveTask(task_id, &state);
-      // Since we are spilling back from the ready and waiting queues, we need
-      // to unsubscribe the dependencies.
-      if (state != TaskState::INFEASIBLE) {
-        // Don't unsubscribe for infeasible tasks because we never subscribed in
-        // the first place.
-        RAY_CHECK(task_dependency_manager_.UnsubscribeDependencies(task_id));
-      }
-      // Attempt to forward the task. If this fails to forward the task,
-      // the task will be resubmit locally.
-      ForwardTaskOrResubmit(task, client_id);
-    }
+    TryLocalInfeasibleTaskScheduling();
   }
   return;
 }
@@ -516,34 +497,35 @@ void NodeManager::ResourceDeleted(const ClientTableDataT &client_data) {
     cluster_schedres.DeleteResource(resource_label);
   }
   RAY_LOG(DEBUG) << "[ResourceDeleted] Updated local_available_resources and cluster_resource_map.";
-  RAY_LOG(DEBUG) << "[ResourceDeleted] Cluster resource map for client_id " << client_id << " is "
-  << "\nTotal res: " << cluster_resource_map_[client_id].GetTotalResources().ToString()
-  << "\nAvail res: " << cluster_resource_map_[client_id].GetAvailableResources().ToString()
-  << "\nLoad res: " << cluster_resource_map_[client_id].GetLoadResources().ToString();
 
   const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
-  if (local_client_id == client_id){
+  if (local_client_id == client_id) {
     // The resource update is on the local node, check if we can reschedule tasks.
-    // todo(romilb): This is code copy pasted from HeartbeatAdded - make this a function.
-    RAY_LOG(DEBUG) << "[ResourceDeleted] The resource delete is on the local node, check if we can reschedule tasks";
-    auto decision = scheduling_policy_.LocalResourcesChanged(cluster_schedres);
-    for (const auto &task_id : decision) {
-      // (See design_docs/task_states.rst for the state transition diagram.)
-      TaskState state;
-      const auto task = local_queues_.RemoveTask(task_id, &state);
-      // Since we are spilling back from the ready and waiting queues, we need
-      // to unsubscribe the dependencies.
-      if (state != TaskState::INFEASIBLE) {
-        // Don't unsubscribe for infeasible tasks because we never subscribed in
-        // the first place.
-        RAY_CHECK(task_dependency_manager_.UnsubscribeDependencies(task_id));
-      }
-      // Attempt to forward the task. If this fails to forward the task,
-      // the task will be resubmit locally.
-      ForwardTaskOrResubmit(task, client_id);
-    }
+    TryLocalInfeasibleTaskScheduling();
   }
   return;
+}
+
+void NodeManager::TryLocalInfeasibleTaskScheduling() {
+  RAY_LOG(DEBUG) << "[LocalResourceUpdateRescheduler] The resource update is on the local node, check if we can reschedule tasks";
+  const ClientID &local_client_id = gcs_client_->client_table().GetLocalClientId();
+  SchedulingResources &new_local_resources = cluster_resource_map_[local_client_id];
+  auto decision = scheduling_policy_.LocalResourcesChanged(new_local_resources);
+  for (const auto &task_id : decision) {
+    // (See design_docs/task_states.rst for the state transition diagram.)
+    TaskState state;
+    const auto task = local_queues_.RemoveTask(task_id, &state);
+    // Since we are spilling back from the ready and waiting queues, we need
+    // to unsubscribe the dependencies.
+    if (state != TaskState::INFEASIBLE) {
+      // Don't unsubscribe for infeasible tasks because we never subscribed in
+      // the first place.
+      RAY_CHECK(task_dependency_manager_.UnsubscribeDependencies(task_id));
+    }
+    // Attempt to forward the task. If this fails to forward the task,
+    // the task will be resubmit locally.
+    ForwardTaskOrResubmit(task, local_client_id);
+  }
 }
 
 void NodeManager::HeartbeatAdded(const ClientID &client_id,
@@ -1251,11 +1233,11 @@ void NodeManager::ProcessCreateResourceRequest(const std::shared_ptr<LocalClient
     client_id = gcs_client_->client_table().GetLocalClientId();
   }
 
-
   // Add the new resource to a skeleton ClientTableDataT object
   ClientTableDataT data;
   gcs_client_->client_table().GetClient(client_id, data);
-  // Replace the resource vectors with the delta
+  // Replace the resource vectors with the resource deltas from the message.
+  // RES_CREATEUPDATE and RES_DELETE entries in the ClientTable track changes (deltas) in the resources
   data.resources_total_label = std::vector<std::string>{resource_name};
   data.resources_total_capacity = std::vector<double>{capacity};
   // Set the correct flag for entry_type
@@ -1292,7 +1274,8 @@ void NodeManager::ProcessDeleteResourceRequest(const std::shared_ptr<LocalClient
   // Add the new resource to a skeleton ClientTableDataT object
   ClientTableDataT data;
   gcs_client_->client_table().GetClient(client_id, data);
-  // Replace the resource vectors with the delta
+  // Replace the resource vectors with the resource deltas from the message.
+  // RES_CREATEUPDATE and RES_DELETE entries in the ClientTable track changes (deltas) in the resources
   data.resources_total_label = std::vector<std::string>{resource_name};
   data.resources_total_capacity = std::vector<double>{0}; // This is just a placeholder. Actually the resource gets deleted.
   // Set the correct flag for entry_type

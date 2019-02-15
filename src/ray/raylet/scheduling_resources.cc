@@ -112,7 +112,9 @@ bool ResourceSet::SubtractResourcesStrict(const ResourceSet &other, bool delete_
       oversubscribed = true;
     }
     if (resource_capacity_[resource_label] == 0) {
-      resource_capacity_.erase(resource_label);
+      if (delete_zero_capacity == true){
+        resource_capacity_.erase(resource_label);
+      }
     }
   }
   return !oversubscribed;
@@ -350,7 +352,7 @@ void ResourceIds::Release(const ResourceIds &resource_ids) {
 
   double return_resource_count = whole_ids_to_return.size();
   if (return_resource_count > decrement_backlog_){
-    // We are returning more resources than in the decrement backlog, thus set the backlog to zero and insert count - decrement_backlog resources.
+    // We are returning more resources than in the decrement backlog, thus set the backlog to zero and insert (count - decrement_backlog resources).
     whole_ids_.insert(whole_ids_.end(), whole_ids_to_return.begin()+decrement_backlog_,
                       whole_ids_to_return.end());
     decrement_backlog_ = 0;
@@ -517,7 +519,7 @@ ResourceIdSet ResourceIdSet::Acquire(const ResourceSet &resource_set) {
   return ResourceIdSet(acquired_resources);
 }
 
-void ResourceIdSet::Release(const ray::raylet::ResourceIdSet &resource_id_set, bool strict) {
+void ResourceIdSet::Release(const ResourceIdSet &resource_id_set, bool strict) {
   for (auto const &resource_pair : resource_id_set.AvailableResources()) {
     auto const &resource_name = resource_pair.first;
     auto const &resource_ids = resource_pair.second;
@@ -685,24 +687,6 @@ const ResourceSet &SchedulingResources::GetLoadResources() const {
 // Return specified resources back to SchedulingResources.
 bool SchedulingResources::Release(const ResourceSet &resources) {
   bool avail_status = resources_available_.AddResourcesCapacityConstrained(resources, resources_total_);
-//  //todo(romilb): Do we neeed to update load here.
-//  for (const auto &resource_pair : resources) {
-//    const std::string &resource_label = resource_pair.first;
-//    const double &release_capacity = resource_pair.second;
-//
-//    double release_capacity = 0;
-//    bool resource_exists = resources_load_.GetResource(resource_label, &release_capacity);
-//    if (resource_exists){
-//      double new_load = resource_load - release_capacity;
-//      if (new_load <= 0){
-//        // if releasing more than the load, then delete from load map
-//        resources_load_.DeleteResource(resource_label);
-//      }
-//      else{
-//        resources_load_.AddResource(resource_label, new_load) // Update operation.
-//      }
-//    }
-//
   return avail_status;
 }
 
