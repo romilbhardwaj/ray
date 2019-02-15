@@ -2910,3 +2910,236 @@ def test_dynamic_res_deletion_clientid(ray_start_cluster):
     resources = target_client['Resources']
     print(ray.global_state.cluster_resources())
     assert res_name not in resources
+
+def test_dynamic_res_creation_scheduler_consistency(ray_start_cluster):
+    # This makes sure the resource is actually created and the state is consistent in the scheduler
+    # by launching a task which requests the created resource
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 1.0
+    num_nodes = 5
+
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    clientids = [client['ClientID'] for client in ray.global_state.client_table()]
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, res_client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=res_client_id)
+
+    # Create the resource on node1
+    target_clientid = clientids[1]
+    ray.get(create_res.remote(res_name, res_capacity, target_clientid))
+
+    # Define a task which requires this resource
+    @ray.remote(resources={res_name: res_capacity})
+    def test_func():
+        return 1
+
+    result = test_func.remote()
+    successful, unsuccessful = ray.wait([result], timeout=5)
+    assert successful   # The task completed
+
+def test_dynamic_res_deletion_scheduler_consistency(ray_start_cluster):
+    # This makes sure the resource is actually deleted and the state is consistent in the scheduler
+    # by launching an infeasible task which requests the created resource
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 1.0
+    num_nodes = 5
+
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    clientids = [client['ClientID'] for client in ray.global_state.client_table()]
+
+    @ray.remote
+    def delete_res(resource_name, res_client_id):
+        ray.experimental.delete_resource(resource_name, client_id=res_client_id)
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, res_client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=res_client_id)
+
+    # Create the resource on node1
+    target_clientid = clientids[1]
+    ray.get(create_res.remote(res_name, res_capacity, target_clientid))
+    assert ray.global_state.cluster_resources()[res_name] == res_capacity
+
+    # Delete the resource
+    ray.get(delete_res.remote(res_name, target_clientid))
+
+    # Define a task which requires this resource. This should not run
+    @ray.remote(resources={res_name: res_capacity})
+    def test_func():
+        return 1
+
+    result = test_func.remote()
+    successful, unsuccessful = ray.wait([result], timeout=5)
+    assert unsuccessful   # The task did not complete because it's infeasible
+
+def test_dynamic_res_concurrent_res_increment(ray_start_cluster):
+    # This test makes sure resource capacity is updated (increment) correctly when a task has already acquired some of the resource.
+
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 5
+    updated_capacity = 10
+    num_nodes = 5
+    SLEEP_DURATION = 1
+
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    clientids = [client['ClientID'] for client in ray.global_state.client_table()]
+    target_clientid = clientids[1]
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, res_client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=res_client_id)
+
+    # Create the resource on node 1
+    ray.get(create_res.remote(res_name, res_capacity, target_clientid))
+    assert ray.global_state.cluster_resources()[res_name] == res_capacity
+
+    # Define a task which requires this resource.
+    @ray.remote
+    def test_func():
+        time.sleep(SLEEP_DURATION)
+        #Replace this with ray.wait on objectid, see component failures.py for put_object
+        return 1
+
+    # Launch the task with resource requirement of 1, thus the new available capacity becomes 4
+    task = test_func._remote(args=[], resources={res_name: 1})
+
+    # Update the resource capacity
+    ray.get(create_res.remote(res_name, updated_capacity, target_clientid))
+
+    # Wait for task to complete
+    ray.get(task)
+
+    # Check if scheduler state is consistent by launching a task requiring updated capacity
+    task_2 = test_func._remote(args=[], resources={res_name: updated_capacity})
+    successful, unsuccessful = ray.wait([task_2], timeout=SLEEP_DURATION*2)
+    assert successful   # The task completed
+
+    # Check if scheduler state is consistent by launching a task requiring updated capacity + 1. This should not execute
+    task_3 = test_func._remote(args=[], resources={res_name: updated_capacity+1})  # This should be infeasible
+    successful, unsuccessful = ray.wait([task_3], timeout=SLEEP_DURATION*2)
+    assert unsuccessful   # The task did not complete because it's infeasible
+    assert ray.global_state.available_resources()[res_name] == updated_capacity
+
+def test_dynamic_res_concurrent_res_decrement(ray_start_cluster):
+    # This test makes sure resource capacity is updated (decremented) correctly when a task has already acquired some of the resource.
+
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 5
+    updated_capacity = 3
+    num_nodes = 5
+    SLEEP_DURATION = 1
+
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    clientids = [client['ClientID'] for client in ray.global_state.client_table()]
+    target_clientid = clientids[1]
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, res_client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=res_client_id)
+
+    # Create the resource on node 1
+    ray.get(create_res.remote(res_name, res_capacity, target_clientid))
+    assert ray.global_state.cluster_resources()[res_name] == res_capacity
+
+    # Define a task which requires this resource
+    @ray.remote
+    def test_func():
+        time.sleep(SLEEP_DURATION)
+        return 1
+
+    # Launch the task with resource requirement of 4, thus the new available capacity becomes 1
+    task = test_func._remote(args=[], resources={res_name: 4})
+
+    # Decrease the resource capacity
+    ray.get(create_res.remote(res_name, updated_capacity, target_clientid))
+
+    # Wait for task to complete
+    ray.get(task)
+
+    # Check if scheduler state is consistent by launching a task requiring updated capacity
+    task_2 = test_func._remote(args=[], resources={res_name: updated_capacity})
+    successful, unsuccessful = ray.wait([task_2], timeout=SLEEP_DURATION*2)
+    assert successful   # The task completed
+
+    # Check if scheduler state is consistent by launching a task requiring updated capacity + 1. This should not execute
+    task_3 = test_func._remote(args=[], resources={res_name: updated_capacity+1})  # This should be infeasible
+    successful, unsuccessful = ray.wait([task_3], timeout=SLEEP_DURATION*2)
+    assert unsuccessful   # The task did not complete because it's infeasible
+    assert ray.global_state.available_resources()[res_name] == updated_capacity
+
+def test_dynamic_res_concurrent_res_delete(ray_start_cluster):
+    # This test makes sure resource gets deleted correctly when a task has already acquired the resource
+
+    cluster = ray_start_cluster
+
+    res_name = "test_res"
+    res_capacity = 5
+    num_nodes = 5
+    SLEEP_DURATION = 1
+
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    clientids = [client['ClientID'] for client in ray.global_state.client_table()]
+    target_clientid = clientids[1]
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, res_client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=res_client_id)
+
+    @ray.remote
+    def delete_res(resource_name, res_client_id):
+        ray.experimental.delete_resource(resource_name, client_id=res_client_id)
+
+    # Create the resource on node 1
+    ray.get(create_res.remote(res_name, res_capacity, target_clientid))
+    assert ray.global_state.cluster_resources()[res_name] == res_capacity
+
+    # Define a task which requires this resource.
+    @ray.remote
+    def test_func():
+        time.sleep(SLEEP_DURATION)
+        return 1
+
+    # Launch the task with resource requirement of 1, thus the new available capacity becomes 4
+    task = test_func._remote(args=[], resources={res_name: 1})
+
+    # Delete the resource
+    ray.get(delete_res.remote(res_name, target_clientid))
+
+    # Wait for task to complete
+    ray.get(task)
+
+    # Check if scheduler state is consistent by launching a task requiring the deleted resource  This should not execute
+    task_2 = test_func._remote(args=[], resources={res_name: 1})  # This should be infeasible
+    successful, unsuccessful = ray.wait([task_2], timeout=SLEEP_DURATION*2)
+    assert unsuccessful   # The task did not complete because it's infeasible
+    assert res_name not in ray.global_state.available_resources()
+
