@@ -346,7 +346,7 @@ class ResourceIdSet {
   /// \param capacity capacity of the resource being added
   void CreateResource(const std::string resource_name, const double capacity);
 
-  /// \brief Deletes a resource in the ResourceIdSet. todo(romilb): This does not raise an exception, just deletes the resource. Tasks with acquired resources keep running. Is this behaviour okay?
+  /// \brief Deletes a resource in the ResourceIdSet. This does not raise an exception, just deletes the resource. Tasks with acquired resources keep running.
   ///
   /// \param resource_name the name of the resource to delete
   void DeleteResource(const std::string resource_name);

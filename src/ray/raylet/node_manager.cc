@@ -478,7 +478,6 @@ void NodeManager::ResourceCreateUpdated(const ClientTableDataT &client_data) {
 }
 
 void NodeManager::ResourceDeleted(const ClientTableDataT &client_data) {
-  //TODO(romilb): This callback is the same as resource deleted since it the cache has already updated client_data. Can we remove this?
   const ClientID client_id = ClientID::from_binary(client_data.client_id);
   ResourceSet new_res_set(client_data.resources_total_label,
                               client_data.resources_total_capacity);
