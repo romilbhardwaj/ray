@@ -3165,3 +3165,34 @@ def test_dynamic_res_concurrent_res_delete(ray_start_cluster):
     assert unsuccessful   # The task did not complete because it's infeasible
     assert res_name not in ray.global_state.available_resources()
 
+def test_dynamic_res_creation_stress(ray_start_cluster):
+    # This stress tests creates many resources simultaneously on the same client and then checks if the final state is consistent
+
+    cluster = ray_start_cluster
+
+    res_capacity = 1
+    num_nodes = 5
+    NUM_RES_TO_CREATE = 500
+
+    for i in range(num_nodes):
+        cluster.add_node()
+
+    ray.init(redis_address=cluster.redis_address)
+
+    clientids = [client['ClientID'] for client in ray.global_state.client_table()]
+    target_clientid = clientids[1]
+
+    @ray.remote
+    def create_res(resource_name, resource_capacity, res_client_id):
+        ray.experimental.create_resource(resource_name, resource_capacity, client_id=res_client_id)
+
+    @ray.remote
+    def delete_res(resource_name, res_client_id):
+        ray.experimental.delete_resource(resource_name, client_id=res_client_id)
+
+    results = [create_res.remote(str(i), res_capacity, target_clientid) for i in range(0, NUM_RES_TO_CREATE)]
+    ray.get(results)
+    time.sleep(1) # Wait for heartbeats to propagate
+    resources = ray.global_state.cluster_resources()
+    for i in range(0, NUM_RES_TO_CREATE):
+        assert str(i) in resources
