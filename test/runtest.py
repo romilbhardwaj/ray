@@ -3016,7 +3016,7 @@ def test_dynamic_res_concurrent_res_increment(ray_start_cluster):
     res_capacity = 5
     updated_capacity = 10
     num_nodes = 5
-    SLEEP_DURATION = 1
+    TIMEOUT_DURATION = 1
 
     for i in range(num_nodes):
         cluster.add_node()
@@ -3034,30 +3034,36 @@ def test_dynamic_res_concurrent_res_increment(ray_start_cluster):
     ray.get(create_res.remote(res_name, res_capacity, target_clientid))
     assert ray.global_state.cluster_resources()[res_name] == res_capacity
 
-    # Define a task which requires this resource.
+    # Task to hold the resource till the driver signals to finish
+    @ray.remote
+    def wait_func(id_in_a_list):
+        ray.get(id_in_a_list[0])    # To make the task wait till signalled by driver
+
     @ray.remote
     def test_func():
-        time.sleep(SLEEP_DURATION)
-        #Replace this with ray.wait on objectid, see component failures.py for put_object
         return 1
 
+    # Create a object ID to have the task wait on
+    WAIT_OBJECT_ID = ray.ObjectID(('a'*20).encode("ascii"))
+
     # Launch the task with resource requirement of 1, thus the new available capacity becomes 4
-    task = test_func._remote(args=[], resources={res_name: 1})
+    task = wait_func._remote(args=[[WAIT_OBJECT_ID]], resources={res_name: 1})
 
     # Update the resource capacity
     ray.get(create_res.remote(res_name, updated_capacity, target_clientid))
 
-    # Wait for task to complete
+    # Signal task to complete
+    ray.worker.global_worker.put_object(WAIT_OBJECT_ID, 1)
     ray.get(task)
 
     # Check if scheduler state is consistent by launching a task requiring updated capacity
     task_2 = test_func._remote(args=[], resources={res_name: updated_capacity})
-    successful, unsuccessful = ray.wait([task_2], timeout=SLEEP_DURATION*2)
+    successful, unsuccessful = ray.wait([task_2], timeout=TIMEOUT_DURATION)
     assert successful   # The task completed
 
     # Check if scheduler state is consistent by launching a task requiring updated capacity + 1. This should not execute
     task_3 = test_func._remote(args=[], resources={res_name: updated_capacity+1})  # This should be infeasible
-    successful, unsuccessful = ray.wait([task_3], timeout=SLEEP_DURATION*2)
+    successful, unsuccessful = ray.wait([task_3], timeout=TIMEOUT_DURATION)
     assert unsuccessful   # The task did not complete because it's infeasible
     assert ray.global_state.available_resources()[res_name] == updated_capacity
 
@@ -3070,7 +3076,7 @@ def test_dynamic_res_concurrent_res_decrement(ray_start_cluster):
     res_capacity = 5
     updated_capacity = 3
     num_nodes = 5
-    SLEEP_DURATION = 1
+    TIMEOUT_DURATION = 1
 
     for i in range(num_nodes):
         cluster.add_node()
@@ -3088,29 +3094,36 @@ def test_dynamic_res_concurrent_res_decrement(ray_start_cluster):
     ray.get(create_res.remote(res_name, res_capacity, target_clientid))
     assert ray.global_state.cluster_resources()[res_name] == res_capacity
 
-    # Define a task which requires this resource
+    # Task to hold the resource till the driver signals to finish
+    @ray.remote
+    def wait_func(id_in_a_list):
+        ray.get(id_in_a_list[0])    # To make the task wait till signalled by driver
+
     @ray.remote
     def test_func():
-        time.sleep(SLEEP_DURATION)
         return 1
 
+    # Create a object ID to have the task wait on
+    WAIT_OBJECT_ID = ray.ObjectID(('a'*20).encode("ascii"))
+
     # Launch the task with resource requirement of 4, thus the new available capacity becomes 1
-    task = test_func._remote(args=[], resources={res_name: 4})
+    task = wait_func._remote(args=[[WAIT_OBJECT_ID]], resources={res_name: 4})
 
     # Decrease the resource capacity
     ray.get(create_res.remote(res_name, updated_capacity, target_clientid))
 
-    # Wait for task to complete
+    # Signal task to complete
+    ray.worker.global_worker.put_object(WAIT_OBJECT_ID, 1)
     ray.get(task)
 
     # Check if scheduler state is consistent by launching a task requiring updated capacity
     task_2 = test_func._remote(args=[], resources={res_name: updated_capacity})
-    successful, unsuccessful = ray.wait([task_2], timeout=SLEEP_DURATION*2)
+    successful, unsuccessful = ray.wait([task_2], timeout=TIMEOUT_DURATION)
     assert successful   # The task completed
 
     # Check if scheduler state is consistent by launching a task requiring updated capacity + 1. This should not execute
     task_3 = test_func._remote(args=[], resources={res_name: updated_capacity+1})  # This should be infeasible
-    successful, unsuccessful = ray.wait([task_3], timeout=SLEEP_DURATION*2)
+    successful, unsuccessful = ray.wait([task_3], timeout=TIMEOUT_DURATION)
     assert unsuccessful   # The task did not complete because it's infeasible
     assert ray.global_state.available_resources()[res_name] == updated_capacity
 
@@ -3122,7 +3135,7 @@ def test_dynamic_res_concurrent_res_delete(ray_start_cluster):
     res_name = "test_res"
     res_capacity = 5
     num_nodes = 5
-    SLEEP_DURATION = 1
+    TIMEOUT_DURATION = 1
 
     for i in range(num_nodes):
         cluster.add_node()
@@ -3144,24 +3157,31 @@ def test_dynamic_res_concurrent_res_delete(ray_start_cluster):
     ray.get(create_res.remote(res_name, res_capacity, target_clientid))
     assert ray.global_state.cluster_resources()[res_name] == res_capacity
 
-    # Define a task which requires this resource.
+    # Task to hold the resource till the driver signals to finish
+    @ray.remote
+    def wait_func(id_in_a_list):
+        ray.get(id_in_a_list[0])    # To make the task wait till signalled by driver
+
     @ray.remote
     def test_func():
-        time.sleep(SLEEP_DURATION)
         return 1
 
+    # Create a object ID to have the task wait on
+    WAIT_OBJECT_ID = ray.ObjectID(('a'*20).encode("ascii"))
+
     # Launch the task with resource requirement of 1, thus the new available capacity becomes 4
-    task = test_func._remote(args=[], resources={res_name: 1})
+    task = wait_func._remote(args=[[WAIT_OBJECT_ID]], resources={res_name: 1})
 
     # Delete the resource
     ray.get(delete_res.remote(res_name, target_clientid))
 
-    # Wait for task to complete
+    # Signal task to complete
+    ray.worker.global_worker.put_object(WAIT_OBJECT_ID, 1)
     ray.get(task)
 
     # Check if scheduler state is consistent by launching a task requiring the deleted resource  This should not execute
     task_2 = test_func._remote(args=[], resources={res_name: 1})  # This should be infeasible
-    successful, unsuccessful = ray.wait([task_2], timeout=SLEEP_DURATION*2)
+    successful, unsuccessful = ray.wait([task_2], timeout=TIMEOUT_DURATION)
     assert unsuccessful   # The task did not complete because it's infeasible
     assert res_name not in ray.global_state.available_resources()
 
@@ -3192,7 +3212,7 @@ def test_dynamic_res_creation_stress(ray_start_cluster):
 
     results = [create_res.remote(str(i), res_capacity, target_clientid) for i in range(0, NUM_RES_TO_CREATE)]
     ray.get(results)
-    time.sleep(1) # Wait for heartbeats to propagate
+    time.sleep(0.1) # Wait for heartbeats to propagate
     resources = ray.global_state.cluster_resources()
     for i in range(0, NUM_RES_TO_CREATE):
         assert str(i) in resources
