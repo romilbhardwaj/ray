@@ -329,6 +329,7 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
   if (entry == client_cache_.end()) {
     // If the entry is not in the cache, then the notification is new.
     is_notif_new = true;
+    is_res_modified = false;
   } else {
     // If the entry is in the cache, then the notification is new if the client
     // was alive and is now dead or resources have been updated.
