@@ -35,7 +35,7 @@ for client_id in client_ids:
 @ray.remote
 def long_task(task_id):
     print("Running %d" % task_id)
-    time.sleep(10)
+    time.sleep(5)
     return str(ray.worker.global_worker.plasma_client.store_socket_name)
 
 # Now we want to run NUM_TASKS instances of long_task, spread across the three nodes.

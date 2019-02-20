@@ -14,6 +14,7 @@ cluster = ray.test.cluster_utils.Cluster()
 #cluster = ray.test.cluster_utils.Cluster(initialize_head=True, head_node_args={"resources": NODE_INIT_RESOURCES})
 for i in range(NUM_NODES):
     cluster.add_node(num_cpus=8)
+
 cluster.wait_for_nodes()
 
 print("Cluster init complete, connecting driver")
@@ -29,7 +30,6 @@ num_resources_to_create = 1 # We don't know how many resources to create, so sta
 for client_id in client_ids:
     ray.experimental.create_resource("load_balancer", num_resources_to_create, client_id)
 
-time.sleep(1)
 # Define long running task
 @ray.remote
 def long_task(task_id):
@@ -65,8 +65,10 @@ start_time = time.time()
 task_results = []
 for i in range(0, NUM_TASKS):
     task_results.append(long_task._remote(args=[i], resources={"load_balancer": 1}))
+
+
 print("Getting task results")
 res = ray.get(task_results)
 end_time = time.time()
 print("Plasma store sockets:  " + str(Counter(res)))
-print("Time taken = " + str(end_time-start_time))
+# print("Time taken = " + str(end_time-start_time))

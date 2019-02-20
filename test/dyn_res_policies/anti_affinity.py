@@ -1,10 +1,11 @@
+import math
 from collections import Counter
 
 import ray
 import time
 import ray.test.cluster_utils
 
-# This example demonstrates co-location by creating a resource where the first task lands.
+# This example demonstrates implementation of anti-affinity with dynamic custom resources.
 NUM_NODES = 3
 
 # Initialize cluster
@@ -23,20 +24,18 @@ client_table = ray.global_state.client_table()
 client_ids = [client["ClientID"] for client in client_table]
 print("ClientIds: " + str(",".join(client_ids)))
 
+# Create anti-affinity resource
+num_resources_to_create = 1
+print("Creating %d anti-affnity resource on nodes" % num_resources_to_create)
+for client_id in client_ids:
+    ray.experimental.create_resource("anti_affinity", num_resources_to_create, client_id)
+
 # Define first running task
 @ray.remote
-def first_task():
-    print("Create resource locally so that the other task can colocate")
-    ray.experimental.create_resource("my_colocation", 1)
+def task():
+    print("Running first task")
     time.sleep(5)
     print("Completed first task")
-    return str(ray.worker.global_worker.plasma_client.store_socket_name)
-
-@ray.remote
-def co_located_task():
-    print("Running co-located task")
-    time.sleep(5)
-    print("Completed co-located task")
     return str(ray.worker.global_worker.plasma_client.store_socket_name)
 
 # Now we want to run instances of long_task, spread across the three nodes.
@@ -44,8 +43,8 @@ def co_located_task():
 print("Launching tasks")
 start_time = time.time()
 task_results = []
-task_results.append(first_task.remote())
-task_results.append(co_located_task._remote(args=[], resources={"my_colocation": 1}))
+task_results.append(task._remote(args=[], resources={"anti_affinity": 1}))
+task_results.append(task._remote(args=[], resources={"anti_affinity": 1}))
 print("Getting task results")
 res = ray.get(task_results)
 end_time = time.time()
