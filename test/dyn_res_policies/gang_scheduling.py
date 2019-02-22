@@ -50,13 +50,13 @@ start_time = time.time()
 task_ids = []
 for i in range(0, GANG_SIZE):
     task_ids.append(long_task._remote(args=[i], resources={"my_gang": 1}))
-ready_ids, waiting_ids = ray.wait(task_ids, num_returns=GANG_SIZE, timeout=500)
+ready_ids, waiting_ids = ray.wait(task_ids, num_returns=GANG_SIZE, timeout=0.5)
 
 # Loop to check if gang completed. If resource availability drops in between, exception is raised
 i=0
 while len(ready_ids) != GANG_SIZE:
     print("Waiting for tasks to complete or nodes to fail.")
-    ready_ids, waiting_ids = ray.wait(task_ids, num_returns=GANG_SIZE, timeout=1000)
+    ready_ids, waiting_ids = ray.wait(task_ids, num_returns=GANG_SIZE, timeout=1)
     my_gang_resources = ray.global_state.cluster_resources()["my_gang"]
     print("My gang resources: %d" % my_gang_resources)
     if my_gang_resources < GANG_SIZE:
