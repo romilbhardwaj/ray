@@ -3,6 +3,8 @@ import time
 import ray.test.cluster_utils
 
 NUM_NODES = 3
+NUM_NODES_TO_RESERVE = 3
+MAX_RESERVATION_TRIES = 20
 
 # Initialize cluster
 print("Initializing cluster..")
@@ -37,13 +39,11 @@ def distributed_atomic_task():
 print("Launching tasks")
 start_time = time.time()
 
-NUM_NODES_TO_RESERVE = 3
-MAX_RESERVATION_TRIES = 10
-
 reservation_actors = []
 reservation_alive_checks = []
 for i in range(0,NUM_NODES_TO_RESERVE):
     act = reservation_actor._remote(args=[], kwargs={}, num_cpus=6)
+    time.sleep(1)
     reservation_alive_checks.append(act.alive.remote())
     reservation_actors.append(act)
 
@@ -52,11 +52,12 @@ try_count = 0
 while len(ready_ids) != NUM_NODES_TO_RESERVE:
     print("Waiting for reservations to succeed. Try count: %d" % try_count)
     ready_ids, waiting_ids = ray.wait(reservation_alive_checks, num_returns=NUM_NODES_TO_RESERVE, timeout=1)
-    try_count+=1;
+    try_count += 1
     if try_count == MAX_RESERVATION_TRIES:
         # Cleanup - kill running actors
         for act in reservation_actors:
             del act
+            # .__ray_terminate__.remote() could use this
         raise Exception("Reservation failed.")
 
 print("Reservation successful.")
