@@ -67,12 +67,18 @@ class ResourceSet {
   /// False otherwise.
   bool IsSuperset(const ResourceSet &other) const;
 
-  /// \brief Add a new resource to the resource set.
+  /// \brief Add or update a new resource to the resource set.
   ///
   /// \param resource_name: name/label of the resource to add.
   /// \param capacity: numeric capacity value for the resource to add.
   /// \return True, if the resource was successfully added. False otherwise.
   bool AddResource(const std::string &resource_name, double capacity);
+
+  /// \brief Delete a resource from the resource set.
+  ///
+  /// \param resource_name: name/label of the resource to delete.
+  /// \return True, if the resource was successfully deleted. False otherwise.
+  bool DeleteResource(const std::string &resource_name);
 
   /// \brief Remove the specified resource from the resource set.
   ///
@@ -86,6 +92,13 @@ class ResourceSet {
   /// \param other: The other resource set to add.
   /// \return True if the resource set was added successfully. False otherwise.
   bool AddResourcesStrict(const ResourceSet &other);
+
+  /// \brief Add a set of resources to the current set of resources subject to upper limits on capacity from the total_resource set.
+  ///
+  /// \param other: The other resource set to add.
+  /// \param total_resources: Total resource set which sets upper limits on capacity for each label.
+  /// \return True if the resource set was added successfully. False otherwise.
+  bool AddResourcesCapacityConstrained(const ResourceSet &other, const ResourceSet &total_resources);
 
   /// \brief Aggregate resources from the other set into this set, adding any missing
   /// resource labels to this set.
@@ -101,6 +114,27 @@ class ResourceSet {
   /// \return True if the resource set was subtracted successfully.
   /// False otherwise.
   bool SubtractResourcesStrict(const ResourceSet &other);
+
+  /// \brief Subtract a set of resources from the current set of resources, only if
+  /// resource labels match.
+  ///
+  /// \param other: The resource set to subtract from the current resource set.
+  /// \param delete_zero_capacity: Delete the resource from the ResourceSet if the new capacity is zero.
+  /// \return True if the resource set was subtracted successfully.
+  /// False otherwise.
+  bool SubtractResourcesStrict(const ResourceSet &other, bool delete_zero_capacity);
+
+  /// \brief Finds new resources created or updated in a new set.
+  ///
+  /// \param new_res_set: The new resource set to compare with.
+  /// \return The ResourceSet of updated values
+  ResourceSet FindUpdatedResources(const ResourceSet &new_res_set) const;
+
+  /// \brief Finds resources deleted in a set.
+  ///
+  /// \param new_res_set: The new resource set to compare with.
+  /// \return The ResourceSet of deleted resources with old capacities
+  ResourceSet FindDeletedResources(const ResourceSet &new_res_set) const;
 
   /// Return the capacity value associated with the specified resource.
   ///
@@ -215,6 +249,24 @@ class ResourceIds {
   /// \return A human-readable string representing the object.
   std::string ToString() const;
 
+  /// \brief Increase resource capacity by the given amount. This may throw an error if decrement is more than currently available resources.
+  ///
+  /// \param new_capacity double of new capacity
+  /// \return Void.
+  void UpdateCapacity(double new_capacity);
+
+  /// \brief Increase resource capacity by the given amount.
+  ///
+  /// \param increment_quantity A double of how many unit resources to add.
+  /// \return Void.
+  void IncreaseCapacity(double increment_quantity);
+
+  /// \brief Decrease resource capacity by the given amount. Adds to the decrement backlog if more than available resources are decremented.
+  ///
+  /// \param decrement_quantity A double of how many unit resources to remove.
+  /// \return Void.
+  void DecreaseCapacity(double decrement_quantity);
+
  private:
   /// Check that a double is in fact a whole number.
   ///
@@ -227,6 +279,14 @@ class ResourceIds {
   /// A vector of pairs of resource ID and a fraction of that ID (the fraction
   /// is at least zero and strictly less than 1).
   std::vector<std::pair<int64_t, double>> fractional_ids_;
+  /// A double to track the greatest id of the resource - this needs to be maintained to
+  /// ensure unique ids are used when creating new resources. This keeps incrementing,
+  /// and resources may have gaps in between. TODO(romilb): Is this a safe assumption?
+  double greatest_id_;
+  /// A double to track the total capacity of the resource, since the whole_ids_ vector keeps changing
+  double total_capacity_;
+  /// A double to track any pending decrements in capacity that weren't executed because of insufficient available resources. This backlog in cleared in the release method.
+  double decrement_backlog_;
 };
 
 /// \class ResourceIdSet
@@ -264,8 +324,9 @@ class ResourceIdSet {
   /// \brief Return a set of resource IDs.
   ///
   /// \param resource_id_set The resource IDs to return.
+  /// \param strict If set to to true, creates any resources that do not already exist in the ResourceIdSet. Else ignores any new resources.
   /// \return Void.
-  void Release(const ResourceIdSet &resource_id_set);
+  void Release(const ResourceIdSet &resource_id_set, bool strict=false);
 
   /// \brief Clear out all of the resource IDs.
   ///
@@ -277,6 +338,18 @@ class ResourceIdSet {
   /// \param resource_id_set The other set of resource IDs to combine with this one.
   /// \return The combination of the two sets of resource IDs.
   ResourceIdSet Plus(const ResourceIdSet &resource_id_set) const;
+
+  /// \brief Creates or updates a resource in the ResourceIdSet if it already exists. Raises an exception if
+  /// the new capacity (when less than old capacity) cannot be set because of busy resources.
+  ///
+  /// \param resource_name the name of the resource to create/update
+  /// \param capacity capacity of the resource being added
+  void CreateResource(const std::string resource_name, const double capacity);
+
+  /// \brief Deletes a resource in the ResourceIdSet. This does not raise an exception, just deletes the resource. Tasks with acquired resources keep running.
+  ///
+  /// \param resource_name the name of the resource to delete
+  void DeleteResource(const std::string resource_name);
 
   /// \brief Get the underlying mapping from resource name to resource IDs.
   ///
@@ -378,6 +451,18 @@ class SchedulingResources {
   ///
   /// \return string.
   std::string DebugString() const;
+
+  /// \brief Update total, available and load resources with the specified capacity. Create if not exists.
+  ///
+  /// \param
+  /// \return Void.
+  void UpdateResource(std::string resource_name, double capacity);
+
+  /// \brief Delete resource from total, available and load resources.
+  ///
+  /// \param
+  /// \return Void.
+  void DeleteResource(std::string resource_name);
 
  private:
   /// Static resource configuration (e.g., static_resources).
