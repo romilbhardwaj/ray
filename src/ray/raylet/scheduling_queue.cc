@@ -66,7 +66,9 @@ bool TaskQueue::RemoveTask(const TaskID &task_id, std::vector<Task> *removed_tas
   }
 
   auto list_iterator = task_found_iterator->second;
-  // Resource bookkeeping
+  // Resource bookkeeping. This subtract must be strict and delete any zero capacity resources
+  // for garbage collection. This is important because this resource set is forwarded in
+  // heartbeats, and any resources that are deleted must not exist in the set.
   current_resource_load_.SubtractResourcesStrict(
       list_iterator->GetTaskSpecification().GetRequiredResources(), /*delete_zero_capacity=*/ true);
   if (removed_tasks) {
