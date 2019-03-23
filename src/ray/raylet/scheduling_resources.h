@@ -77,8 +77,8 @@ class ResourceSet {
   /// \brief Delete a resource from the resource set.
   ///
   /// \param resource_name: name/label of the resource to delete.
-  /// \return True, if the resource was successfully deleted. False otherwise.
-  bool DeleteResource(const std::string &resource_name);
+  /// \return Void
+  void DeleteResource(const std::string &resource_name);
 
   /// \brief Remove the specified resource from the resource set.
   ///
@@ -111,14 +111,6 @@ class ResourceSet {
   /// resource labels match.
   ///
   /// \param other: The resource set to subtract from the current resource set.
-  /// \return True if the resource set was subtracted successfully.
-  /// False otherwise.
-  bool SubtractResourcesStrict(const ResourceSet &other);
-
-  /// \brief Subtract a set of resources from the current set of resources, only if
-  /// resource labels match.
-  ///
-  /// \param other: The resource set to subtract from the current resource set.
   /// \param delete_zero_capacity: Delete the resource from the ResourceSet if the new capacity is zero.
   /// \return True if the resource set was subtracted successfully.
   /// False otherwise.
@@ -126,15 +118,15 @@ class ResourceSet {
 
   /// \brief Finds new resources created or updated in a new set.
   ///
-  /// \param new_res_set: The new resource set to compare with.
+  /// \param new_resource_set: The new resource set to compare with.
   /// \return The ResourceSet of updated values
-  ResourceSet FindUpdatedResources(const ResourceSet &new_res_set) const;
+  ResourceSet FindUpdatedResources(const ResourceSet &new_resource_set) const;
 
   /// \brief Finds resources deleted in a set.
   ///
-  /// \param new_res_set: The new resource set to compare with.
+  /// \param new_resource_set: The new resource set to compare with.
   /// \return The ResourceSet of deleted resources with old capacities
-  ResourceSet FindDeletedResources(const ResourceSet &new_res_set) const;
+  ResourceSet FindDeletedResources(const ResourceSet &new_resource_set) const;
 
   /// Return the capacity value associated with the specified resource.
   ///
@@ -279,10 +271,10 @@ class ResourceIds {
   /// A vector of pairs of resource ID and a fraction of that ID (the fraction
   /// is at least zero and strictly less than 1).
   std::vector<std::pair<int64_t, double>> fractional_ids_;
-  /// A double to track the greatest id of the resource - this needs to be maintained to
+  /// int to track the greatest id of the resource - this needs to be maintained to
   /// ensure unique ids are used when creating new resources. This keeps incrementing,
-  /// and resources may have gaps in between. TODO(romilb): Is this a safe assumption?
-  double greatest_id_;
+  /// and resources may have gaps in between.
+  int64_t greatest_id_;
   /// A double to track the total capacity of the resource, since the whole_ids_ vector keeps changing
   double total_capacity_;
   /// A double to track any pending decrements in capacity that weren't executed because of insufficient available resources. This backlog in cleared in the release method.
@@ -324,7 +316,7 @@ class ResourceIdSet {
   /// \brief Return a set of resource IDs.
   ///
   /// \param resource_id_set The resource IDs to return.
-  /// \param strict If set to to true, creates any resources that do not already exist in the ResourceIdSet. Else ignores any new resources.
+  /// \param strict If set to to true, creates any resources that do not already exist in the ResourceIdSet. Else ignores any new resources and does not add them back to available_resources_.
   /// \return Void.
   void Release(const ResourceIdSet &resource_id_set, bool strict=false);
 
@@ -454,13 +446,14 @@ class SchedulingResources {
 
   /// \brief Update total, available and load resources with the specified capacity. Create if not exists.
   ///
-  /// \param
+  /// \param resource_name: Name of the resource to be modified
+  /// \param capacity: New capacity of the resource.
   /// \return Void.
   void UpdateResource(std::string resource_name, double capacity);
 
   /// \brief Delete resource from total, available and load resources.
   ///
-  /// \param
+  /// \param resource_name: Name of the resource to be deleted.
   /// \return Void.
   void DeleteResource(std::string resource_name);
 

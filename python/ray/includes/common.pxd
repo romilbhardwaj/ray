@@ -123,7 +123,7 @@ cdef extern from "ray/raylet/scheduling_resources.h" \
         c_bool RemoveResource(const c_string &resource_name)
         c_bool AddResourcesStrict(const ResourceSet &other)
         void AddResources(const ResourceSet &other)
-        c_bool SubtractResourcesStrict(const ResourceSet &other)
+        c_bool SubtractResourcesStrict(const ResourceSet &other, c_bool delete_zero_capacity)
         c_bool GetResource(const c_string &resource_name, double *value) const
         double GetNumCpus() const
         c_bool IsEmpty() const

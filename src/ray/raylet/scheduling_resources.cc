@@ -73,29 +73,12 @@ bool ResourceSet::AddResource(const std::string &resource_name, double capacity)
   return true;
 }
 
-bool ResourceSet::DeleteResource(const std::string &resource_name) {
+void ResourceSet::DeleteResource(const std::string &resource_name) {
   resource_capacity_.erase(resource_name);
-  return true;
 }
 
 bool ResourceSet::RemoveResource(const std::string &resource_name) {
   throw std::runtime_error("Method not implemented");
-}
-
-bool ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
-  // Subtract the resources and track whether a resource goes below zero.
-  bool oversubscribed = false;
-  for (const auto &resource_pair : other.GetResourceMap()) {
-    const std::string &resource_label = resource_pair.first;
-    const double &resource_capacity = resource_pair.second;
-    RAY_CHECK(resource_capacity_.count(resource_label) == 1)
-        << "Attempt to acquire unknown resource: " << resource_label;
-    resource_capacity_[resource_label] -= resource_capacity;
-    if (resource_capacity_[resource_label] < 0) {
-      oversubscribed = true;
-    }
-  }
-  return !oversubscribed;
 }
 
 
@@ -215,10 +198,10 @@ const std::unordered_map<std::string, double> &ResourceSet::GetResourceMap() con
 };
 
 
-ResourceSet ResourceSet::FindUpdatedResources(const ray::raylet::ResourceSet &new_res_set) const{
+ResourceSet ResourceSet::FindUpdatedResources(const ray::raylet::ResourceSet &new_resource_set) const{
   // Find any new resources and return a ResourceSet with the resource and new capacities
   ResourceSet UpdatedResourceSet;
-  for (const auto &resource_pair : new_res_set.GetResourceMap()) {
+  for (const auto &resource_pair : new_resource_set.GetResourceMap()) {
     const std::string &resource_label = resource_pair.first;
     const double &new_resource_capacity = resource_pair.second;
     if (resource_capacity_.count(resource_label) == 1) {
@@ -236,14 +219,14 @@ ResourceSet ResourceSet::FindUpdatedResources(const ray::raylet::ResourceSet &ne
 }
 
 
-ResourceSet ResourceSet::FindDeletedResources(const ray::raylet::ResourceSet &new_res_set) const {
+ResourceSet ResourceSet::FindDeletedResources(const ray::raylet::ResourceSet &new_resource_set) const {
   // Find any new resources and return a ResourceSet with the resource and new capacities
   ResourceSet DeletedResourceSet;
-  auto &new_res_map = new_res_set.GetResourceMap();
+  auto &new_resource_map = new_resource_set.GetResourceMap();
   for (const auto &resource_pair : resource_capacity_) {
     const std::string &resource_label = resource_pair.first;
     const double &old_resource_capacity = resource_pair.second;
-    if (new_res_map.count(resource_label) != 1) {
+    if (new_resource_map.count(resource_label) != 1) {
       // Resource does not exist, add to return set
       DeletedResourceSet.AddResource(resource_label, old_resource_capacity);
     }
@@ -530,7 +513,7 @@ void ResourceIdSet::Release(const ResourceIdSet &resource_id_set, bool strict) {
 
     auto it = available_resources_.find(resource_name);
     if (it == available_resources_.end()) {
-      if (strict==false){
+      if (!strict){
         // Resource not found in ResourceIdSet. This happens when a resource was acquired,
         // got deleted by resource deletion call and later got released by a task. In this case, do nothing
       }
@@ -686,13 +669,13 @@ const ResourceSet &SchedulingResources::GetLoadResources() const {
 
 // Return specified resources back to SchedulingResources.
 bool SchedulingResources::Release(const ResourceSet &resources) {
-  bool avail_status = resources_available_.AddResourcesCapacityConstrained(resources, resources_total_);
-  return avail_status;
+  bool release_status = resources_available_.AddResourcesCapacityConstrained(resources, resources_total_);
+  return release_status;
 }
 
 // Take specified resources from SchedulingResources.
 bool SchedulingResources::Acquire(const ResourceSet &resources) {
-  return resources_available_.SubtractResourcesStrict(resources);
+  return resources_available_.SubtractResourcesStrict(resources, /*delete_zero_capacity=*/false);
 }
 
 void SchedulingResources::UpdateResource(std::string resource_name, double capacity){
@@ -701,14 +684,14 @@ void SchedulingResources::UpdateResource(std::string resource_name, double capac
   if (resource_exists){
       // If the resource exists, add to total and available resources
       double capacity_difference = capacity - current_capacity;
-      double current_avail_capacity = 0;
-      resources_available_.GetResource(resource_name, &current_avail_capacity);
-      double new_avail_capacity = current_avail_capacity + capacity_difference;
-      if (new_avail_capacity < 0){
-        new_avail_capacity = 0;
+      double current_available_capacity = 0;
+      resources_available_.GetResource(resource_name, &current_available_capacity);
+      double new_available_capacity = current_available_capacity + capacity_difference;
+      if (new_available_capacity < 0){
+        new_available_capacity = 0;
       }
       resources_total_.AddResource(resource_name, capacity);
-      resources_available_.AddResource(resource_name, new_avail_capacity);
+      resources_available_.AddResource(resource_name, new_available_capacity);
   }
   else{
     // Resource does not exist, just add it to total, available, and set load to 0
