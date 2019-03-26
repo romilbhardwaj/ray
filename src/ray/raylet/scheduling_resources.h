@@ -86,12 +86,15 @@ class ResourceSet {
   /// \return True, if the resource was successfully removed. False otherwise.
   bool RemoveResource(const std::string &resource_name);
 
-  /// \brief Add a set of resources to the current set of resources subject to upper limits on capacity from the total_resource set.
+  /// \brief Add a set of resources to the current set of resources subject to upper
+  /// limits on capacity from the total_resource set.
   ///
   /// \param other: The other resource set to add.
-  /// \param total_resources: Total resource set which sets upper limits on capacity for each label.
-  /// \return True if the resource set was added successfully. False otherwise.
-  bool AddResourcesCapacityConstrained(const ResourceSet &other, const ResourceSet &total_resources);
+  /// \param total_resources: Total resource set which sets upper limits on capacity for
+  /// each label. \return True if the resource set was added successfully. False
+  /// otherwise.
+  bool AddResourcesCapacityConstrained(const ResourceSet &other,
+                                       const ResourceSet &total_resources);
 
   /// \brief Aggregate resources from the other set into this set, adding any missing
   /// resource labels to this set.
@@ -233,7 +236,8 @@ class ResourceIds {
   /// \return A human-readable string representing the object.
   std::string ToString() const;
 
-  /// \brief Increase resource capacity by the given amount. This may throw an error if decrement is more than currently available resources.
+  /// \brief Increase resource capacity by the given amount. This may throw an error if
+  /// decrement is more than currently available resources.
   ///
   /// \param new_capacity double of new capacity
   /// \return Void.
@@ -245,7 +249,8 @@ class ResourceIds {
   /// \return Void.
   void IncreaseCapacity(double increment_quantity);
 
-  /// \brief Decrease resource capacity by the given amount. Adds to the decrement backlog if more than available resources are decremented.
+  /// \brief Decrease resource capacity by the given amount. Adds to the decrement backlog
+  /// if more than available resources are decremented.
   ///
   /// \param decrement_quantity A double of how many unit resources to remove.
   /// \return Void.
@@ -267,9 +272,11 @@ class ResourceIds {
   /// ensure unique ids are used when creating new resources. This keeps incrementing,
   /// and resources may have gaps in between.
   int64_t greatest_id_;
-  /// A double to track the total capacity of the resource, since the whole_ids_ vector keeps changing
+  /// A double to track the total capacity of the resource, since the whole_ids_ vector
+  /// keeps changing
   double total_capacity_;
-  /// A double to track any pending decrements in capacity that weren't executed because of insufficient available resources. This backlog in cleared in the release method.
+  /// A double to track any pending decrements in capacity that weren't executed because
+  /// of insufficient available resources. This backlog in cleared in the release method.
   double decrement_backlog_;
 };
 
@@ -308,9 +315,10 @@ class ResourceIdSet {
   /// \brief Return a set of resource IDs.
   ///
   /// \param resource_id_set The resource IDs to return.
-  /// \param strict If set to to true, creates any resources that do not already exist in the ResourceIdSet. Else ignores any new resources and does not add them back to available_resources_.
-  /// \return Void.
-  void Release(const ResourceIdSet &resource_id_set, bool strict=false);
+  /// \param strict If set to to true, creates any resources that do not already exist in
+  /// the ResourceIdSet. Else ignores any new resources and does not add them back to
+  /// available_resources_. \return Void.
+  void Release(const ResourceIdSet &resource_id_set, bool strict = false);
 
   /// \brief Clear out all of the resource IDs.
   ///
@@ -323,14 +331,16 @@ class ResourceIdSet {
   /// \return The combination of the two sets of resource IDs.
   ResourceIdSet Plus(const ResourceIdSet &resource_id_set) const;
 
-  /// \brief Creates or updates a resource in the ResourceIdSet if it already exists. Raises an exception if
-  /// the new capacity (when less than old capacity) cannot be set because of busy resources.
+  /// \brief Creates or updates a resource in the ResourceIdSet if it already exists.
+  /// Raises an exception if the new capacity (when less than old capacity) cannot be set
+  /// because of busy resources.
   ///
   /// \param resource_name the name of the resource to create/update
   /// \param capacity capacity of the resource being added
   void AddOrUpdateResource(const std::string &resource_name, const double capacity);
 
-  /// \brief Deletes a resource in the ResourceIdSet. This does not raise an exception, just deletes the resource. Tasks with acquired resources keep running.
+  /// \brief Deletes a resource in the ResourceIdSet. This does not raise an exception,
+  /// just deletes the resource. Tasks with acquired resources keep running.
   ///
   /// \param resource_name the name of the resource to delete
   void DeleteResource(const std::string &resource_name);
@@ -436,7 +446,8 @@ class SchedulingResources {
   /// \return string.
   std::string DebugString() const;
 
-  /// \brief Update total, available and load resources with the specified capacity. Create if not exists.
+  /// \brief Update total, available and load resources with the specified capacity.
+  /// Create if not exists.
   ///
   /// \param resource_name: Name of the resource to be modified
   /// \param capacity: New capacity of the resource.
