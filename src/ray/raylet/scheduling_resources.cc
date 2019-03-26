@@ -19,7 +19,7 @@ ResourceSet::ResourceSet(const std::vector<std::string> &resource_labels,
                          const std::vector<double> resource_capacity) {
   RAY_CHECK(resource_labels.size() == resource_capacity.size());
   for (uint i = 0; i < resource_labels.size(); i++) {
-    RAY_CHECK(AddResource(resource_labels[i], resource_capacity[i]));
+    RAY_CHECK(AddOrUpdateResource(resource_labels[i], resource_capacity[i]));
   }
 }
 
@@ -68,7 +68,7 @@ bool ResourceSet::IsEqual(const ResourceSet &rhs) const {
   return (this->IsSubset(rhs) && rhs.IsSubset(*this));
 }
 
-bool ResourceSet::AddResource(const std::string &resource_name, double capacity) {
+bool ResourceSet::AddOrUpdateResource(const std::string &resource_name, double capacity) {
   resource_capacity_[resource_name] = capacity;
   return true;
 }
@@ -97,19 +97,6 @@ bool ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
   return !oversubscribed;
 }
 
-
-// Perform a left join.
-bool ResourceSet::AddResourcesStrict(const ResourceSet &other) {
-  // Return failure if attempting to perform vector addition with unknown labels.
-  for (const auto &resource_pair : other.GetResourceMap()) {
-    const std::string &resource_label = resource_pair.first;
-    const double &resource_capacity = resource_pair.second;
-    RAY_CHECK(resource_capacity_.count(resource_label) != 0);
-    resource_capacity_[resource_label] += resource_capacity;
-  }
-  return true;
-}
-
 // Add a set of resources to the current set of resources subject to upper limits on capacity from the total_resource set
 bool ResourceSet::AddResourcesCapacityConstrained(const ResourceSet &other, const ResourceSet &total_resources) {
   const std::unordered_map<std::string, double> total_resource_map = total_resources.GetResourceMap();
@@ -117,16 +104,10 @@ bool ResourceSet::AddResourcesCapacityConstrained(const ResourceSet &other, cons
     const std::string &to_add_resource_label = resource_pair.first;
     const double &to_add_resource_capacity = resource_pair.second;
     if (total_resource_map.count(to_add_resource_label) != 0){
-      // If resource exists in total map, add to the local capacity map
+      // If resource exists in total map, add to the local capacity map.
+      // If the new capacity will be greater the total capacity, set the new capacity to total capacity (capping to the total)
       double total_capacity = total_resource_map.at(to_add_resource_label);
-      if ((resource_capacity_[to_add_resource_label] + to_add_resource_capacity) > total_capacity){
-        // If the new capacity will be greater the total capacity, set the new capacity to total capacity (capping to the total)
-        resource_capacity_[to_add_resource_label] = total_capacity;
-      }
-      else{
-        // Otherwise it's a safe add, go ahead.
-        resource_capacity_[to_add_resource_label] += to_add_resource_capacity;
-      }
+      resource_capacity_[to_add_resource_label] = std::min(resource_capacity_[to_add_resource_label] + to_add_resource_capacity, total_capacity);
     }
     else {
       // Resource does not exist in the total map, it probably got deleted from the total. Don't panic, do nothing and simply continue.
@@ -142,7 +123,7 @@ void ResourceSet::AddResources(const ResourceSet &other) {
     const double &resource_capacity = resource_pair.second;
     if (resource_capacity_.count(resource_label) == 0) {
       // Add the new label if not found.
-      RAY_CHECK(AddResource(resource_label, resource_capacity));
+      RAY_CHECK(AddOrUpdateResource(resource_label, resource_capacity));
     } else {
       // Increment the resource by its capacity.
       resource_capacity_[resource_label] += resource_capacity;
@@ -194,7 +175,7 @@ const std::unordered_map<std::string, double> &ResourceSet::GetResourceMap() con
 
 ResourceSet ResourceSet::FindUpdatedResources(const ray::raylet::ResourceSet &new_resource_set) const{
   // Find any new resources and return a ResourceSet with the resource and new capacities
-  ResourceSet UpdatedResourceSet;
+  ResourceSet updated_resource_set;
   for (const auto &resource_pair : new_resource_set.GetResourceMap()) {
     const std::string &resource_label = resource_pair.first;
     const double &new_resource_capacity = resource_pair.second;
@@ -202,30 +183,30 @@ ResourceSet ResourceSet::FindUpdatedResources(const ray::raylet::ResourceSet &ne
       // Resource exists, check if updated
       double old_resource_capacity = resource_capacity_.at(resource_label);
       if (old_resource_capacity != new_resource_capacity) {
-        UpdatedResourceSet.AddResource(resource_label, new_resource_capacity);
+        updated_resource_set.AddOrUpdateResource(resource_label, new_resource_capacity);
       }
     } else {
       // Resource does not exist in the old set, add to return set
-      UpdatedResourceSet.AddResource(resource_label, new_resource_capacity);
+      updated_resource_set.AddOrUpdateResource(resource_label, new_resource_capacity);
     }
   }
-  return UpdatedResourceSet;
+  return updated_resource_set;
 }
 
 
 ResourceSet ResourceSet::FindDeletedResources(const ray::raylet::ResourceSet &new_resource_set) const {
   // Find any new resources and return a ResourceSet with the resource and new capacities
-  ResourceSet DeletedResourceSet;
+  ResourceSet deleted_resource_set;
   auto &new_resource_map = new_resource_set.GetResourceMap();
   for (const auto &resource_pair : resource_capacity_) {
     const std::string &resource_label = resource_pair.first;
     const double &old_resource_capacity = resource_pair.second;
     if (new_resource_map.count(resource_label) != 1) {
       // Resource does not exist, add to return set
-      DeletedResourceSet.AddResource(resource_label, old_resource_capacity);
+      deleted_resource_set.AddOrUpdateResource(resource_label, old_resource_capacity);
     }
   }
-  return DeletedResourceSet;
+  return deleted_resource_set;
 }
 
 /// ResourceIds class implementation
@@ -530,7 +511,7 @@ ResourceIdSet ResourceIdSet::Plus(const ResourceIdSet &resource_id_set) const {
   return resource_id_set_to_return;
 }
 
-void ResourceIdSet::CreateResource(const std::string &resource_name, const double capacity) {
+void ResourceIdSet::AddOrUpdateResource(const std::string &resource_name, const double capacity) {
   auto it = available_resources_.find(resource_name);
   if (it != available_resources_.end()) {
     // If resource exists, update capacity
@@ -684,14 +665,14 @@ void SchedulingResources::UpdateResource(std::string &resource_name, double capa
       if (new_available_capacity < 0){
         new_available_capacity = 0;
       }
-      resources_total_.AddResource(resource_name, capacity);
-      resources_available_.AddResource(resource_name, new_available_capacity);
+      resources_total_.AddOrUpdateResource(resource_name, capacity);
+      resources_available_.AddOrUpdateResource(resource_name, new_available_capacity);
   }
   else{
     // Resource does not exist, just add it to total, available, and set load to 0
-    resources_total_.AddResource(resource_name, capacity);
-    resources_available_.AddResource(resource_name, capacity);
-    resources_load_.AddResource(resource_name, 0);
+    resources_total_.AddOrUpdateResource(resource_name, capacity);
+    resources_available_.AddOrUpdateResource(resource_name, capacity);
+    resources_load_.AddOrUpdateResource(resource_name, 0);
   }
 }
 

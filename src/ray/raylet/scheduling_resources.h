@@ -72,7 +72,7 @@ class ResourceSet {
   /// \param resource_name: name/label of the resource to add.
   /// \param capacity: numeric capacity value for the resource to add.
   /// \return True, if the resource was successfully added. False otherwise.
-  bool AddResource(const std::string &resource_name, double capacity);
+  bool AddOrUpdateResource(const std::string &resource_name, double capacity);
 
   /// \brief Delete a resource from the resource set.
   ///
@@ -85,13 +85,6 @@ class ResourceSet {
   /// \param resource_name: name/label of the resource to remove.
   /// \return True, if the resource was successfully removed. False otherwise.
   bool RemoveResource(const std::string &resource_name);
-
-  /// \brief Add a set of resources to the current set of resources only if the resource
-  /// labels match.
-  ///
-  /// \param other: The other resource set to add.
-  /// \return True if the resource set was added successfully. False otherwise.
-  bool AddResourcesStrict(const ResourceSet &other);
 
   /// \brief Add a set of resources to the current set of resources subject to upper limits on capacity from the total_resource set.
   ///
@@ -335,7 +328,7 @@ class ResourceIdSet {
   ///
   /// \param resource_name the name of the resource to create/update
   /// \param capacity capacity of the resource being added
-  void CreateResource(const std::string &resource_name, const double capacity);
+  void AddOrUpdateResource(const std::string &resource_name, const double capacity);
 
   /// \brief Deletes a resource in the ResourceIdSet. This does not raise an exception, just deletes the resource. Tasks with acquired resources keep running.
   ///
