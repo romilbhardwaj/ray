@@ -111,10 +111,9 @@ class ResourceSet {
   /// resource labels match.
   ///
   /// \param other: The resource set to subtract from the current resource set.
-  /// \param delete_zero_capacity: Delete the resource from the ResourceSet if the new capacity is zero.
   /// \return True if the resource set was subtracted successfully.
   /// False otherwise.
-  bool SubtractResourcesStrict(const ResourceSet &other, bool delete_zero_capacity);
+  bool SubtractResourcesStrict(const ResourceSet &other);
 
   /// \brief Finds new resources created or updated in a new set.
   ///
@@ -336,12 +335,12 @@ class ResourceIdSet {
   ///
   /// \param resource_name the name of the resource to create/update
   /// \param capacity capacity of the resource being added
-  void CreateResource(const std::string resource_name, const double capacity);
+  void CreateResource(const std::string &resource_name, const double capacity);
 
   /// \brief Deletes a resource in the ResourceIdSet. This does not raise an exception, just deletes the resource. Tasks with acquired resources keep running.
   ///
   /// \param resource_name the name of the resource to delete
-  void DeleteResource(const std::string resource_name);
+  void DeleteResource(const std::string &resource_name);
 
   /// \brief Get the underlying mapping from resource name to resource IDs.
   ///
@@ -449,13 +448,13 @@ class SchedulingResources {
   /// \param resource_name: Name of the resource to be modified
   /// \param capacity: New capacity of the resource.
   /// \return Void.
-  void UpdateResource(std::string resource_name, double capacity);
+  void UpdateResource(std::string &resource_name, double capacity);
 
   /// \brief Delete resource from total, available and load resources.
   ///
   /// \param resource_name: Name of the resource to be deleted.
   /// \return Void.
-  void DeleteResource(std::string resource_name);
+  void DeleteResource(std::string &resource_name);
 
  private:
   /// Static resource configuration (e.g., static_resources).

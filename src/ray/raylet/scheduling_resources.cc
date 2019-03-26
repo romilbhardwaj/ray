@@ -81,23 +81,17 @@ bool ResourceSet::RemoveResource(const std::string &resource_name) {
   throw std::runtime_error("Method not implemented");
 }
 
-
-bool ResourceSet::SubtractResourcesStrict(const ResourceSet &other, bool delete_zero_capacity) {
+bool ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
   // Subtract the resources and track whether a resource goes below zero.
   bool oversubscribed = false;
   for (const auto &resource_pair : other.GetResourceMap()) {
     const std::string &resource_label = resource_pair.first;
     const double &resource_capacity = resource_pair.second;
     RAY_CHECK(resource_capacity_.count(resource_label) == 1)
-    << "Attempt to acquire unknown resource: " << resource_label;
+        << "Attempt to acquire unknown resource: " << resource_label;
     resource_capacity_[resource_label] -= resource_capacity;
     if (resource_capacity_[resource_label] < 0) {
       oversubscribed = true;
-    }
-    if (resource_capacity_[resource_label] == 0) {
-      if (delete_zero_capacity == true){
-        resource_capacity_.erase(resource_label);
-      }
     }
   }
   return !oversubscribed;
@@ -536,7 +530,7 @@ ResourceIdSet ResourceIdSet::Plus(const ResourceIdSet &resource_id_set) const {
   return resource_id_set_to_return;
 }
 
-void ResourceIdSet::CreateResource(const std::string resource_name, const double capacity) {
+void ResourceIdSet::CreateResource(const std::string &resource_name, const double capacity) {
   auto it = available_resources_.find(resource_name);
   if (it != available_resources_.end()) {
     // If resource exists, update capacity
@@ -549,7 +543,7 @@ void ResourceIdSet::CreateResource(const std::string resource_name, const double
   }
 }
 
-void ResourceIdSet::DeleteResource(const std::string resource_name) {
+void ResourceIdSet::DeleteResource(const std::string &resource_name) {
   available_resources_.erase(resource_name);
 }
 
@@ -675,10 +669,10 @@ bool SchedulingResources::Release(const ResourceSet &resources) {
 
 // Take specified resources from SchedulingResources.
 bool SchedulingResources::Acquire(const ResourceSet &resources) {
-  return resources_available_.SubtractResourcesStrict(resources, /*delete_zero_capacity=*/false);
+  return resources_available_.SubtractResourcesStrict(resources);
 }
 
-void SchedulingResources::UpdateResource(std::string resource_name, double capacity){
+void SchedulingResources::UpdateResource(std::string &resource_name, double capacity){
   double current_capacity = 0;
   bool resource_exists = resources_total_.GetResource(resource_name, &current_capacity);
   if (resource_exists){
@@ -701,7 +695,7 @@ void SchedulingResources::UpdateResource(std::string resource_name, double capac
   }
 }
 
-void SchedulingResources::DeleteResource(std::string resource_name){
+void SchedulingResources::DeleteResource(std::string &resource_name){
   resources_total_.DeleteResource(resource_name);
   resources_available_.DeleteResource(resource_name);
   resources_load_.DeleteResource(resource_name);
