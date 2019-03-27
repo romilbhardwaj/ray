@@ -225,23 +225,17 @@ ResourceIds::ResourceIds(double resource_quantity) {
   for (int64_t i = 0; i < whole_quantity; ++i) {
     whole_ids_.push_back(i);
   }
-  greatest_id_ = resource_quantity;
   total_capacity_ = TotalQuantity();
   decrement_backlog_ = 0;
 }
 
 ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids)
     : whole_ids_(whole_ids),
-      greatest_id_(*std::max_element(whole_ids.begin(), whole_ids.end())),
       total_capacity_(whole_ids.size()),
       decrement_backlog_(0) {}
 
 ResourceIds::ResourceIds(const std::vector<std::pair<int64_t, double>> &fractional_ids) {
   fractional_ids_ = fractional_ids;
-  // Find the max id and set it to greatest_id_;
-  const auto p = std::minmax_element(fractional_ids_.begin(), fractional_ids_.end());
-  const auto &max = p.second->first;
-  greatest_id_ = max;
   total_capacity_ = TotalQuantity();
   decrement_backlog_ = 0;
 }
@@ -250,7 +244,6 @@ ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids,
                          const std::vector<std::pair<int64_t, double>> &fractional_ids)
     : whole_ids_(whole_ids),
       fractional_ids_(fractional_ids),
-      greatest_id_(*std::max_element(whole_ids.begin(), whole_ids.end())),
       total_capacity_(TotalQuantity()),
       decrement_backlog_(0) {}
 
@@ -353,7 +346,6 @@ void ResourceIds::Release(const ResourceIds &resource_ids) {
 ResourceIds ResourceIds::Plus(const ResourceIds &resource_ids) const {
   ResourceIds resource_ids_to_return(whole_ids_, fractional_ids_);
   resource_ids_to_return.Release(resource_ids);
-  resource_ids_to_return.greatest_id_ = std::max(greatest_id_, resource_ids.greatest_id_);
   return resource_ids_to_return;
 }
 
@@ -398,7 +390,7 @@ void ResourceIds::UpdateCapacity(double new_capacity) {
 
 void ResourceIds::IncreaseCapacity(double increment_quantity) {
   for (int i = 0; i < increment_quantity; i++) {
-    whole_ids_.push_back(++greatest_id_);
+    whole_ids_.push_back(-1);     // Dynamic resources are assigned resource id -1.
   }
   total_capacity_ += increment_quantity;
 }

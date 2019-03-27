@@ -268,10 +268,6 @@ class ResourceIds {
   /// A vector of pairs of resource ID and a fraction of that ID (the fraction
   /// is at least zero and strictly less than 1).
   std::vector<std::pair<int64_t, double>> fractional_ids_;
-  /// int to track the greatest id of the resource - this needs to be maintained to
-  /// ensure unique ids are used when creating new resources. This keeps incrementing,
-  /// and resources may have gaps in between.
-  int64_t greatest_id_;
   /// A double to track the total capacity of the resource, since the whole_ids_ vector
   /// keeps changing
   double total_capacity_;
