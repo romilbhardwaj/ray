@@ -311,9 +311,9 @@ class ResourceIdSet {
   /// \brief Return a set of resource IDs.
   ///
   /// \param resource_id_set The resource IDs to return.
-  /// \param add_new_resources If set to to true, creates any resources that do not already exist in
-  /// the ResourceIdSet. Else ignores any new resources and does not add them back to
-  /// available_resources_. \return Void.
+  /// \param add_new_resources If set to to true, creates any resources that do not
+  /// already exist in the ResourceIdSet. Else ignores any new resources and does not add
+  /// them back to available_resources_. \return Void.
   void Release(const ResourceIdSet &resource_id_set, bool add_new_resources = false);
 
   /// \brief Clear out all of the resource IDs.

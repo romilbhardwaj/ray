@@ -116,7 +116,10 @@ bool ResourceSet::AddResourcesCapacityConstrained(const ResourceSet &other,
     } else {
       // Resource does not exist in the total map, it probably got deleted from the total.
       // Don't panic, do nothing and simply continue.
-      RAY_LOG(INFO) << "[AddResourcesCapacityConstrained] Resource " << to_add_resource_label << " not found in the total resource map. It probably got deleted, not adding back to resource_capacity_.";
+      RAY_LOG(INFO) << "[AddResourcesCapacityConstrained] Resource "
+                    << to_add_resource_label
+                    << " not found in the total resource map. It probably got deleted, "
+                       "not adding back to resource_capacity_.";
     }
   }
   return true;
@@ -230,14 +233,12 @@ ResourceIds::ResourceIds(double resource_quantity) {
 }
 
 ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids)
-    : whole_ids_(whole_ids),
-      total_capacity_(whole_ids.size()),
-      decrement_backlog_(0) {}
+    : whole_ids_(whole_ids), total_capacity_(whole_ids.size()), decrement_backlog_(0) {}
 
 ResourceIds::ResourceIds(const std::vector<std::pair<int64_t, double>> &fractional_ids)
     : fractional_ids_(fractional_ids),
       total_capacity_(TotalQuantity()),
-      decrement_backlog_(0){}
+      decrement_backlog_(0) {}
 
 ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids,
                          const std::vector<std::pair<int64_t, double>> &fractional_ids)
@@ -325,7 +326,8 @@ void ResourceIds::Release(const ResourceIds &resource_ids) {
     int64_t resource_id = fractional_pair_to_return.first;
     auto const &fractional_pair_it =
         std::find_if(fractional_ids_.begin(), fractional_ids_.end(),
-                     [resource_id](std::pair<int64_t, double> &fractional_pair) {                       return fractional_pair.first == resource_id;
+                     [resource_id](std::pair<int64_t, double> &fractional_pair) {
+                       return fractional_pair.first == resource_id;
                      });
     if (fractional_pair_it == fractional_ids_.end()) {
       fractional_ids_.push_back(fractional_pair_to_return);
@@ -388,12 +390,13 @@ void ResourceIds::UpdateCapacity(int64_t new_capacity) {
 
 void ResourceIds::IncreaseCapacity(int64_t increment_quantity) {
   // Adjust with decrement_backlog_
-  double actual_increment_quantity = std::max(0.0, increment_quantity-decrement_backlog_);
-  decrement_backlog_ = std::max(0.0, decrement_backlog_-increment_quantity);
+  double actual_increment_quantity =
+      std::max(0.0, increment_quantity - decrement_backlog_);
+  decrement_backlog_ = std::max(0.0, decrement_backlog_ - increment_quantity);
 
-  if (actual_increment_quantity > 0){
+  if (actual_increment_quantity > 0) {
     for (int i = 0; i < actual_increment_quantity; i++) {
-      whole_ids_.push_back(-1);     // Dynamic resources are assigned resource id -1.
+      whole_ids_.push_back(-1);  // Dynamic resources are assigned resource id -1.
     }
     total_capacity_ += actual_increment_quantity;
   }
@@ -481,7 +484,8 @@ ResourceIdSet ResourceIdSet::Acquire(const ResourceSet &resource_set) {
   return ResourceIdSet(acquired_resources);
 }
 
-void ResourceIdSet::Release(const ResourceIdSet &resource_id_set, bool add_new_resources) {
+void ResourceIdSet::Release(const ResourceIdSet &resource_id_set,
+                            bool add_new_resources) {
   for (auto const &resource_pair : resource_id_set.AvailableResources()) {
     auto const &resource_name = resource_pair.first;
     auto const &resource_ids = resource_pair.second;
@@ -659,7 +663,8 @@ bool SchedulingResources::Acquire(const ResourceSet &resources) {
   return resources_available_.SubtractResourcesStrict(resources);
 }
 
-void SchedulingResources::UpdateResource(const std::string &resource_name, double capacity) {
+void SchedulingResources::UpdateResource(const std::string &resource_name,
+                                         double capacity) {
   double current_capacity = 0;
   bool resource_exists = resources_total_.GetResource(resource_name, &current_capacity);
   if (resource_exists) {
