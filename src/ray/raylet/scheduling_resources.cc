@@ -1,6 +1,5 @@
 #include "scheduling_resources.h"
 
-#include <algorithm>
 #include <cmath>
 #include <sstream>
 
@@ -101,11 +100,11 @@ bool ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
 // capacity from the total_resource set
 bool ResourceSet::AddResourcesCapacityConstrained(const ResourceSet &other,
                                                   const ResourceSet &total_resources) {
-  const std::unordered_map<std::string, double> total_resource_map =
+  const std::unordered_map<std::string, double> &total_resource_map =
       total_resources.GetResourceMap();
   for (const auto &resource_pair : other.GetResourceMap()) {
     const std::string &to_add_resource_label = resource_pair.first;
-    const double &to_add_resource_capacity = resource_pair.second;
+    double to_add_resource_capacity = resource_pair.second;
     if (total_resource_map.count(to_add_resource_label) != 0) {
       // If resource exists in total map, add to the local capacity map.
       // If the new capacity will be greater the total capacity, set the new capacity to
@@ -117,6 +116,7 @@ bool ResourceSet::AddResourcesCapacityConstrained(const ResourceSet &other,
     } else {
       // Resource does not exist in the total map, it probably got deleted from the total.
       // Don't panic, do nothing and simply continue.
+      RAY_LOG(INFO) << "[AddResourcesCapacityConstrained] Resource " << to_add_resource_label << " not found in the total resource map. It probably got deleted, not adding back to resource_capacity_.";
     }
   }
   return true;
@@ -184,7 +184,7 @@ ResourceSet ResourceSet::FindUpdatedResources(
   ResourceSet updated_resource_set;
   for (const auto &resource_pair : new_resource_set.GetResourceMap()) {
     const std::string &resource_label = resource_pair.first;
-    const double &new_resource_capacity = resource_pair.second;
+    double new_resource_capacity = resource_pair.second;
     if (resource_capacity_.count(resource_label) == 1) {
       // Resource exists, check if updated
       double old_resource_capacity = resource_capacity_.at(resource_label);
@@ -206,7 +206,7 @@ ResourceSet ResourceSet::FindDeletedResources(
   auto &new_resource_map = new_resource_set.GetResourceMap();
   for (const auto &resource_pair : resource_capacity_) {
     const std::string &resource_label = resource_pair.first;
-    const double &old_resource_capacity = resource_pair.second;
+    double old_resource_capacity = resource_pair.second;
     if (new_resource_map.count(resource_label) != 1) {
       // Resource does not exist, add to return set
       deleted_resource_set.AddOrUpdateResource(resource_label, old_resource_capacity);
@@ -234,11 +234,10 @@ ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids)
       total_capacity_(whole_ids.size()),
       decrement_backlog_(0) {}
 
-ResourceIds::ResourceIds(const std::vector<std::pair<int64_t, double>> &fractional_ids) {
-  fractional_ids_ = fractional_ids;
-  total_capacity_ = TotalQuantity();
-  decrement_backlog_ = 0;
-}
+ResourceIds::ResourceIds(const std::vector<std::pair<int64_t, double>> &fractional_ids)
+    : fractional_ids_(fractional_ids),
+      total_capacity_(TotalQuantity()),
+      decrement_backlog_(0){}
 
 ResourceIds::ResourceIds(const std::vector<int64_t> &whole_ids,
                          const std::vector<std::pair<int64_t, double>> &fractional_ids)
@@ -326,8 +325,7 @@ void ResourceIds::Release(const ResourceIds &resource_ids) {
     int64_t resource_id = fractional_pair_to_return.first;
     auto const &fractional_pair_it =
         std::find_if(fractional_ids_.begin(), fractional_ids_.end(),
-                     [resource_id](std::pair<int64_t, double> &fractional_pair) {
-                       return fractional_pair.first == resource_id;
+                     [resource_id](std::pair<int64_t, double> &fractional_pair) {                       return fractional_pair.first == resource_id;
                      });
     if (fractional_pair_it == fractional_ids_.end()) {
       fractional_ids_.push_back(fractional_pair_to_return);
@@ -389,10 +387,16 @@ void ResourceIds::UpdateCapacity(double new_capacity) {
 }
 
 void ResourceIds::IncreaseCapacity(double increment_quantity) {
-  for (int i = 0; i < increment_quantity; i++) {
-    whole_ids_.push_back(-1);     // Dynamic resources are assigned resource id -1.
+  // Adjust with decrement_backlog_
+  double actual_increment_quantity = std::max(0, increment_quantity-decrement_backlog_);
+  decrement_backlog_ = std::max(0, decrement_backlog_-increment_quantity);
+
+  if (actual_increment_quantity > 0){
+    for (int i = 0; i < actual_increment_quantity; i++) {
+      whole_ids_.push_back(-1);     // Dynamic resources are assigned resource id -1.
+    }
+    total_capacity_ += actual_increment_quantity;
   }
-  total_capacity_ += increment_quantity;
 }
 
 void ResourceIds::DecreaseCapacity(double decrement_quantity) {
@@ -477,7 +481,7 @@ ResourceIdSet ResourceIdSet::Acquire(const ResourceSet &resource_set) {
   return ResourceIdSet(acquired_resources);
 }
 
-void ResourceIdSet::Release(const ResourceIdSet &resource_id_set, bool strict) {
+void ResourceIdSet::Release(const ResourceIdSet &resource_id_set, bool add_new_resources) {
   for (auto const &resource_pair : resource_id_set.AvailableResources()) {
     auto const &resource_name = resource_pair.first;
     auto const &resource_ids = resource_pair.second;
@@ -488,7 +492,7 @@ void ResourceIdSet::Release(const ResourceIdSet &resource_id_set, bool strict) {
 
     auto it = available_resources_.find(resource_name);
     if (it == available_resources_.end()) {
-      if (!strict) {
+      if (!add_new_resources) {
         // Resource not found in ResourceIdSet. This happens when a resource was acquired,
         // got deleted by resource deletion call and later got released by a task. In this
         // case, do nothing
@@ -513,7 +517,7 @@ ResourceIdSet ResourceIdSet::Plus(const ResourceIdSet &resource_id_set) const {
 }
 
 void ResourceIdSet::AddOrUpdateResource(const std::string &resource_name,
-                                        const double capacity) {
+                                        double capacity) {
   auto it = available_resources_.find(resource_name);
   if (it != available_resources_.end()) {
     // If resource exists, update capacity
@@ -655,7 +659,7 @@ bool SchedulingResources::Acquire(const ResourceSet &resources) {
   return resources_available_.SubtractResourcesStrict(resources);
 }
 
-void SchedulingResources::UpdateResource(std::string &resource_name, double capacity) {
+void SchedulingResources::UpdateResource(const std::string &resource_name, double capacity) {
   double current_capacity = 0;
   bool resource_exists = resources_total_.GetResource(resource_name, &current_capacity);
   if (resource_exists) {
@@ -677,7 +681,7 @@ void SchedulingResources::UpdateResource(std::string &resource_name, double capa
   }
 }
 
-void SchedulingResources::DeleteResource(std::string &resource_name) {
+void SchedulingResources::DeleteResource(const std::string &resource_name) {
   resources_total_.DeleteResource(resource_name);
   resources_available_.DeleteResource(resource_name);
   resources_load_.DeleteResource(resource_name);

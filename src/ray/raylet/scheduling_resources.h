@@ -243,6 +243,13 @@ class ResourceIds {
   /// \return Void.
   void UpdateCapacity(double new_capacity);
 
+ private:
+  /// Check that a double is in fact a whole number.
+  ///
+  /// \param resource_quantity A double.
+  /// \return True if the double is an integer and false otherwise.
+  bool IsWhole(double resource_quantity) const;
+
   /// \brief Increase resource capacity by the given amount.
   ///
   /// \param increment_quantity A double of how many unit resources to add.
@@ -255,13 +262,6 @@ class ResourceIds {
   /// \param decrement_quantity A double of how many unit resources to remove.
   /// \return Void.
   void DecreaseCapacity(double decrement_quantity);
-
- private:
-  /// Check that a double is in fact a whole number.
-  ///
-  /// \param resource_quantity A double.
-  /// \return True if the double is an integer and false otherwise.
-  bool IsWhole(double resource_quantity) const;
 
   /// A vector of distinct whole resource IDs.
   std::vector<int64_t> whole_ids_;
@@ -311,10 +311,10 @@ class ResourceIdSet {
   /// \brief Return a set of resource IDs.
   ///
   /// \param resource_id_set The resource IDs to return.
-  /// \param strict If set to to true, creates any resources that do not already exist in
+  /// \param add_new_resources If set to to true, creates any resources that do not already exist in
   /// the ResourceIdSet. Else ignores any new resources and does not add them back to
   /// available_resources_. \return Void.
-  void Release(const ResourceIdSet &resource_id_set, bool strict = false);
+  void Release(const ResourceIdSet &resource_id_set, bool add_new_resources = false);
 
   /// \brief Clear out all of the resource IDs.
   ///
@@ -333,7 +333,7 @@ class ResourceIdSet {
   ///
   /// \param resource_name the name of the resource to create/update
   /// \param capacity capacity of the resource being added
-  void AddOrUpdateResource(const std::string &resource_name, const double capacity);
+  void AddOrUpdateResource(const std::string &resource_name, double capacity);
 
   /// \brief Deletes a resource in the ResourceIdSet. This does not raise an exception,
   /// just deletes the resource. Tasks with acquired resources keep running.
@@ -448,13 +448,13 @@ class SchedulingResources {
   /// \param resource_name: Name of the resource to be modified
   /// \param capacity: New capacity of the resource.
   /// \return Void.
-  void UpdateResource(std::string &resource_name, double capacity);
+  void UpdateResource(const std::string &resource_name, double capacity);
 
   /// \brief Delete resource from total, available and load resources.
   ///
   /// \param resource_name: Name of the resource to be deleted.
   /// \return Void.
-  void DeleteResource(std::string &resource_name);
+  void DeleteResource(const std::string &resource_name);
 
  private:
   /// Static resource configuration (e.g., static_resources).
