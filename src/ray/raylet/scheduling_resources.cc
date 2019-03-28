@@ -375,7 +375,7 @@ std::string ResourceIds::ToString() const {
   return return_string;
 }
 
-void ResourceIds::UpdateCapacity(double new_capacity) {
+void ResourceIds::UpdateCapacity(int64_t new_capacity) {
   // Assert the new capacity is positive for sanity
   RAY_CHECK(new_capacity >= 0);
   double capacity_delta = new_capacity - total_capacity_;
@@ -386,7 +386,7 @@ void ResourceIds::UpdateCapacity(double new_capacity) {
   }
 }
 
-void ResourceIds::IncreaseCapacity(double increment_quantity) {
+void ResourceIds::IncreaseCapacity(int64_t increment_quantity) {
   // Adjust with decrement_backlog_
   double actual_increment_quantity = std::max(0.0, increment_quantity-decrement_backlog_);
   decrement_backlog_ = std::max(0.0, decrement_backlog_-increment_quantity);
@@ -399,7 +399,7 @@ void ResourceIds::IncreaseCapacity(double increment_quantity) {
   }
 }
 
-void ResourceIds::DecreaseCapacity(double decrement_quantity) {
+void ResourceIds::DecreaseCapacity(int64_t decrement_quantity) {
   double available_quantity = TotalQuantity();
   RAY_LOG(DEBUG) << "[DecreaseCapacity] Available quantity: " << available_quantity;
 

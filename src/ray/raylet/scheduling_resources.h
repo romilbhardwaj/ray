@@ -239,9 +239,9 @@ class ResourceIds {
   /// \brief Increase resource capacity by the given amount. This may throw an error if
   /// decrement is more than currently available resources.
   ///
-  /// \param new_capacity double of new capacity
+  /// \param new_capacity int of new capacity
   /// \return Void.
-  void UpdateCapacity(double new_capacity);
+  void UpdateCapacity(int64_t new_capacity);
 
  private:
   /// Check that a double is in fact a whole number.
@@ -252,16 +252,16 @@ class ResourceIds {
 
   /// \brief Increase resource capacity by the given amount.
   ///
-  /// \param increment_quantity A double of how many unit resources to add.
+  /// \param increment_quantity An int of how many unit resources to add.
   /// \return Void.
-  void IncreaseCapacity(double increment_quantity);
+  void IncreaseCapacity(int64_t increment_quantity);
 
   /// \brief Decrease resource capacity by the given amount. Adds to the decrement backlog
   /// if more than available resources are decremented.
   ///
-  /// \param decrement_quantity A double of how many unit resources to remove.
+  /// \param decrement_quantity An int of how many unit resources to remove.
   /// \return Void.
-  void DecreaseCapacity(double decrement_quantity);
+  void DecreaseCapacity(int64_t decrement_quantity);
 
   /// A vector of distinct whole resource IDs.
   std::vector<int64_t> whole_ids_;
