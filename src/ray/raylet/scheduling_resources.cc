@@ -388,8 +388,8 @@ void ResourceIds::UpdateCapacity(double new_capacity) {
 
 void ResourceIds::IncreaseCapacity(double increment_quantity) {
   // Adjust with decrement_backlog_
-  double actual_increment_quantity = std::max(0, increment_quantity-decrement_backlog_);
-  decrement_backlog_ = std::max(0, decrement_backlog_-increment_quantity);
+  double actual_increment_quantity = std::max(0.0, increment_quantity-decrement_backlog_);
+  decrement_backlog_ = std::max(0.0, decrement_backlog_-increment_quantity);
 
   if (actual_increment_quantity > 0){
     for (int i = 0; i < actual_increment_quantity; i++) {
