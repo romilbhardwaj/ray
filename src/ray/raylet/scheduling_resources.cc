@@ -392,7 +392,7 @@ void ResourceIds::IncreaseCapacity(int64_t increment_quantity) {
   // Adjust with decrement_backlog_
   int64_t actual_increment_quantity = 0;
   actual_increment_quantity =
-      std::max<int64_t >(0, increment_quantity - decrement_backlog_);
+      std::max<int64_t>(0, increment_quantity - decrement_backlog_);
   decrement_backlog_ = std::max<int64_t>(0, decrement_backlog_ - increment_quantity);
 
   if (actual_increment_quantity > 0) {
@@ -404,7 +404,8 @@ void ResourceIds::IncreaseCapacity(int64_t increment_quantity) {
 }
 
 void ResourceIds::DecreaseCapacity(int64_t decrement_quantity) {
-  // Get total quantity, but casting to int to truncate any fractional resources. Updates are supported only on whole resources.
+  // Get total quantity, but casting to int to truncate any fractional resources. Updates
+  // are supported only on whole resources.
   int64_t available_quantity = TotalQuantity();
   RAY_LOG(DEBUG) << "[DecreaseCapacity] Available quantity: " << available_quantity;
 
