@@ -380,7 +380,7 @@ std::string ResourceIds::ToString() const {
 void ResourceIds::UpdateCapacity(int64_t new_capacity) {
   // Assert the new capacity is positive for sanity
   RAY_CHECK(new_capacity >= 0);
-  int64_t capacity_delta = new_capacity - total_capacity_;
+  int64_t capacity_delta = new_capacity - (int64_t)total_capacity_;
   if (capacity_delta < 0) {
     DecreaseCapacity(-1 * capacity_delta);
   } else {
