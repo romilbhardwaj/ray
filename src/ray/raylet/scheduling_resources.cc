@@ -307,7 +307,7 @@ ResourceIds ResourceIds::Acquire(double resource_quantity) {
 void ResourceIds::Release(const ResourceIds &resource_ids) {
   auto const &whole_ids_to_return = resource_ids.WholeIds();
 
-  double return_resource_count = whole_ids_to_return.size();
+  int64_t return_resource_count = whole_ids_to_return.size();
   if (return_resource_count > decrement_backlog_) {
     // We are returning more resources than in the decrement backlog, thus set the backlog
     // to zero and insert (count - decrement_backlog resources).
@@ -390,9 +390,10 @@ void ResourceIds::UpdateCapacity(int64_t new_capacity) {
 
 void ResourceIds::IncreaseCapacity(int64_t increment_quantity) {
   // Adjust with decrement_backlog_
-  double actual_increment_quantity =
-      std::max(0.0, increment_quantity - decrement_backlog_);
-  decrement_backlog_ = std::max(0.0, decrement_backlog_ - increment_quantity);
+  int64_t actual_increment_quantity = 0;
+  actual_increment_quantity =
+      std::max<int64_t >(0, increment_quantity - decrement_backlog_);
+  decrement_backlog_ = std::max<int64_t>(0, decrement_backlog_ - increment_quantity);
 
   if (actual_increment_quantity > 0) {
     for (int i = 0; i < actual_increment_quantity; i++) {
@@ -403,7 +404,8 @@ void ResourceIds::IncreaseCapacity(int64_t increment_quantity) {
 }
 
 void ResourceIds::DecreaseCapacity(int64_t decrement_quantity) {
-  double available_quantity = TotalQuantity();
+  // Get total quantity, but casting to int to truncate any fractional resources. Updates are supported only on whole resources.
+  int64_t available_quantity = TotalQuantity();
   RAY_LOG(DEBUG) << "[DecreaseCapacity] Available quantity: " << available_quantity;
 
   if (available_quantity < decrement_quantity) {

@@ -273,7 +273,7 @@ class ResourceIds {
   double total_capacity_;
   /// A double to track any pending decrements in capacity that weren't executed because
   /// of insufficient available resources. This backlog in cleared in the release method.
-  double decrement_backlog_;
+  int64_t decrement_backlog_;
 };
 
 /// \class ResourceIdSet
