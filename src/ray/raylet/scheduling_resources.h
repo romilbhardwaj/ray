@@ -14,14 +14,6 @@ namespace raylet {
 
 const std::string kCPU_ResourceLabel = "CPU";
 
-/// Resource availability status reports whether the resource requirement is
-/// (1) infeasible, (2) feasible but currently unavailable, or (3) available.
-enum class ResourceAvailabilityStatus : int {
-  kInfeasible,            ///< Cannot ever satisfy resource requirements.
-  kResourcesUnavailable,  ///< Feasible, but not currently available.
-  kFeasible               ///< Feasible and currently available.
-};
-
 /// \class ResourceSet
 /// \brief Encapsulates and operates on a set of resources, including CPUs,
 /// GPUs, and custom labels.
@@ -187,6 +179,11 @@ class ResourceIds {
   /// \return The fractional IDs.
   const std::vector<std::pair<int64_t, double>> &FractionalIds() const;
 
+  /// \brief Check if ResourceIds has any resources.
+  ///
+  /// \return True if there are no whole or fractional resources. False otherwise.
+  bool TotalQuantityIsZero() const;
+
   /// \brief Return the total quantity of resources, ignoring the specific IDs.
   ///
   /// \return The total quantity of the resource.
@@ -310,13 +307,6 @@ class SchedulingResources {
 
   /// \brief SchedulingResources destructor.
   ~SchedulingResources();
-
-  /// \brief Check if the specified resource request can be satisfied.
-  ///
-  /// \param set: The set of resources representing the resource request.
-  /// \return Availability status that specifies if the requested resource set
-  /// is feasible, infeasible, or feasible but unavailable.
-  ResourceAvailabilityStatus CheckResourcesSatisfied(ResourceSet &set) const;
 
   /// \brief Request the set and capacity of resources currently available.
   ///

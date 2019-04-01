@@ -12,12 +12,17 @@ namespace raylet {
 ResourceSet::ResourceSet() {}
 
 ResourceSet::ResourceSet(const std::unordered_map<std::string, double> &resource_map)
-    : resource_capacity_(resource_map) {}
+    : resource_capacity_(resource_map) {
+  for (auto const &resource_pair : resource_capacity_){
+    RAY_CHECK(resource_pair.second > 0);
+  }
+}
 
 ResourceSet::ResourceSet(const std::vector<std::string> &resource_labels,
                          const std::vector<double> resource_capacity) {
   RAY_CHECK(resource_labels.size() == resource_capacity.size());
   for (uint i = 0; i < resource_labels.size(); i++) {
+    RAY_CHECK(resource_capacity[i] > 0);
     resource_capacity_[resource_labels[i]] = resource_capacity[i];
   }
 }
@@ -183,6 +188,12 @@ ResourceIds ResourceIds::Acquire(double resource_quantity) {
       if (fractional_pair.second >= resource_quantity) {
         auto return_pair = std::make_pair(fractional_pair.first, resource_quantity);
         fractional_pair.second -= resource_quantity;
+
+        // Remove the fractional pair if the new capacity is 0
+        if (fractional_pair.second == 0){
+          std::swap(fractional_pair, fractional_ids_[fractional_ids_.size() - 1]);
+          fractional_ids_.pop_back();
+        }
         return ResourceIds({return_pair});
       }
     }
@@ -244,6 +255,11 @@ const std::vector<std::pair<int64_t, double>> &ResourceIds::FractionalIds() cons
   return fractional_ids_;
 }
 
+
+bool ResourceIds::TotalQuantityIsZero() const {
+  return whole_ids_.empty() && fractional_ids_.empty();
+}
+
 double ResourceIds::TotalQuantity() const {
   double total_quantity = whole_ids_.size();
   for (auto const &fractional_pair : fractional_ids_) {
@@ -291,9 +307,7 @@ bool ResourceIdSet::Contains(const ResourceSet &resource_set) const {
   for (auto const &resource_pair : resource_set.GetResourceMap()) {
     auto const &resource_name = resource_pair.first;
     double resource_quantity = resource_pair.second;
-    if (resource_quantity == 0) {
-      continue;
-    }
+    RAY_CHECK(resource_quantity > 0);
 
     auto it = available_resources_.find(resource_name);
     if (it == available_resources_.end()) {
@@ -313,14 +327,14 @@ ResourceIdSet ResourceIdSet::Acquire(const ResourceSet &resource_set) {
   for (auto const &resource_pair : resource_set.GetResourceMap()) {
     auto const &resource_name = resource_pair.first;
     double resource_quantity = resource_pair.second;
-
-    if (resource_quantity == 0) {
-      continue;
-    }
+    RAY_CHECK(resource_quantity > 0);
 
     auto it = available_resources_.find(resource_name);
     RAY_CHECK(it != available_resources_.end());
     acquired_resources[resource_name] = it->second.Acquire(resource_quantity);
+    if (it->second.TotalQuantityIsZero()){
+      available_resources_.erase(it);
+    }
   }
   return ResourceIdSet(acquired_resources);
 }
@@ -329,15 +343,10 @@ void ResourceIdSet::Release(const ResourceIdSet &resource_id_set) {
   for (auto const &resource_pair : resource_id_set.AvailableResources()) {
     auto const &resource_name = resource_pair.first;
     auto const &resource_ids = resource_pair.second;
-
-    if (resource_ids.TotalQuantity() == 0) {
-      continue;
-    }
+    RAY_CHECK(!resource_ids.TotalQuantityIsZero());
 
     auto it = available_resources_.find(resource_name);
     if (it == available_resources_.end()) {
-      // This should not happen when Release is called on resources that were obtained
-      // through a corresponding call to Acquire.
       available_resources_[resource_name] = resource_ids;
     } else {
       it->second.Release(resource_ids);
@@ -434,18 +443,6 @@ SchedulingResources::SchedulingResources(const ResourceSet &total)
       resources_load_(ResourceSet()) {}
 
 SchedulingResources::~SchedulingResources() {}
-
-ResourceAvailabilityStatus SchedulingResources::CheckResourcesSatisfied(
-    ResourceSet &resources) const {
-  if (!resources.IsSubset(resources_total_)) {
-    return ResourceAvailabilityStatus::kInfeasible;
-  }
-  // Resource demand specified is feasible. Check if it's available.
-  if (!resources.IsSubset(resources_available_)) {
-    return ResourceAvailabilityStatus::kResourcesUnavailable;
-  }
-  return ResourceAvailabilityStatus::kFeasible;
-}
 
 const ResourceSet &SchedulingResources::GetAvailableResources() const {
   return resources_available_;
