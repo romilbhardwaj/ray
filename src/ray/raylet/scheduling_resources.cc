@@ -156,7 +156,7 @@ bool ResourceIds::Contains(double resource_quantity) const {
           return true;
         }
       }
-      return false;Acquire(
+      return false;
     }
   }
 }
