@@ -67,25 +67,11 @@ class ResourceSet {
   /// False otherwise.
   bool IsSuperset(const ResourceSet &other) const;
 
-  /// \brief Add a new resource to the resource set.
-  ///
-  /// \param resource_name: name/label of the resource to add.
-  /// \param capacity: numeric capacity value for the resource to add.
-  /// \return True, if the resource was successfully added. False otherwise.
-  bool AddResource(const std::string &resource_name, double capacity);
-
   /// \brief Remove the specified resource from the resource set.
   ///
   /// \param resource_name: name/label of the resource to remove.
   /// \return True, if the resource was successfully removed. False otherwise.
   bool RemoveResource(const std::string &resource_name);
-
-  /// \brief Add a set of resources to the current set of resources only if the resource
-  /// labels match.
-  ///
-  /// \param other: The other resource set to add.
-  /// \return True if the resource set was added successfully. False otherwise.
-  bool AddResourcesStrict(const ResourceSet &other);
 
   /// \brief Aggregate resources from the other set into this set, adding any missing
   /// resource labels to this set.
@@ -94,21 +80,17 @@ class ResourceSet {
   /// \return Void.
   void AddResources(const ResourceSet &other);
 
-  /// \brief Subtract a set of resources from the current set of resources, only if
-  /// resource labels match.
+  /// \brief Subtract a set of resources from the current set of resources. Assumes other is a subset of the ResourceSet. Deletes any resource if the capacity after subtraction is zero.
   ///
   /// \param other: The resource set to subtract from the current resource set.
-  /// \return True if the resource set was subtracted successfully.
-  /// False otherwise.
-  bool SubtractResourcesStrict(const ResourceSet &other);
+  /// \return Void.
+  void SubtractResourcesStrict(const ResourceSet &other);
 
   /// Return the capacity value associated with the specified resource.
   ///
   /// \param resource_name: Resource name for which capacity is requested.
-  /// \param[out] value: Resource capacity value.
-  /// \return True if the resource capacity value was successfully retrieved.
-  /// False otherwise.
-  bool GetResource(const std::string &resource_name, double *value) const;
+  /// \return The capacity value associated with the specified resource, zero if resource does not exist.
+  double GetResource(const std::string &resource_name) const;
 
   /// Return the number of CPUs.
   ///
@@ -126,7 +108,7 @@ class ResourceSet {
   const std::string ToString() const;
 
  private:
-  /// Resource capacity map.
+  /// Resource capacity map. The capacities (double) are always positive.
   std::unordered_map<std::string, double> resource_capacity_;
 };
 
@@ -363,16 +345,14 @@ class SchedulingResources {
   /// \brief Release the amount of resources specified.
   ///
   /// \param resources: the amount of resources to be released.
-  /// \return True if resources were successfully released. False otherwise.
-  bool Release(const ResourceSet &resources);
+  /// \return Void.
+  void Release(const ResourceSet &resources);
 
   /// \brief Acquire the amount of resources specified.
   ///
   /// \param resources: the amount of resources to be acquired.
-  /// \return True if resources were acquired without oversubscription. If this
-  /// returns false, then the resources were still acquired, but we are now at
-  /// negative resources.
-  bool Acquire(const ResourceSet &resources);
+  /// \return Void.
+  void Acquire(const ResourceSet &resources);
 
   /// Returns debug string for class.
   ///

@@ -1466,9 +1466,8 @@ void NodeManager::HandleTaskBlocked(const std::shared_ptr<LocalClientConnection>
       // Release the CPU resources.
       auto const cpu_resource_ids = worker->ReleaseTaskCpuResources();
       local_available_resources_.Release(cpu_resource_ids);
-      RAY_CHECK(
-          cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Release(
-              ResourceSet(cpu_resources)));
+      cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Release(
+              ResourceSet(cpu_resources));
       worker->MarkBlocked();
 
       // Try dispatching tasks since we may have released some resources.
@@ -1524,9 +1523,8 @@ void NodeManager::HandleTaskUnblocked(
         // reacquire here may be different from the ones that the task started with.
         auto const resource_ids = local_available_resources_.Acquire(cpu_resources);
         worker->AcquireTaskCpuResources(resource_ids);
-        RAY_CHECK(
-            cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Acquire(
-                cpu_resources));
+        cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Acquire(
+                cpu_resources);
       } else {
         // In this case, we simply don't reacquire the CPU resources for the worker.
         // The worker can keep running and when the task finishes, it will simply
@@ -1618,7 +1616,7 @@ bool NodeManager::AssignTask(const Task &task) {
   auto acquired_resources =
       local_available_resources_.Acquire(spec.GetRequiredResources());
   const auto &my_client_id = gcs_client_->client_table().GetLocalClientId();
-  RAY_CHECK(cluster_resource_map_[my_client_id].Acquire(spec.GetRequiredResources()));
+  cluster_resource_map_[my_client_id].Acquire(spec.GetRequiredResources());
 
   if (spec.IsActorCreationTask()) {
     // Check that we are not placing an actor creation task on a node with 0 CPUs.
@@ -1732,8 +1730,8 @@ void NodeManager::FinishAssignedTask(Worker &worker) {
   // Release task's resources. The worker's lifetime resources are still held.
   auto const &task_resources = worker.GetTaskResourceIds();
   local_available_resources_.Release(task_resources);
-  RAY_CHECK(cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Release(
-      task_resources.ToResourceSet()));
+  cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Release(
+      task_resources.ToResourceSet());
   worker.ResetTaskResourceIds();
 
   // If this was an actor or actor creation task, handle the actor's new state.
