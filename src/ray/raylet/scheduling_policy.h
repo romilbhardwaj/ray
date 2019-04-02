@@ -45,6 +45,18 @@ class SchedulingPolicy {
   /// \return Scheduling decision, mapping tasks to raylets for placement.
   std::vector<TaskID> SpillOver(SchedulingResources &remote_scheduling_resources) const;
 
+  /// \brief This method should be called whenever resources are updated.
+  /// Checks the infeasible tasks and checks if they can be scheduled with the new resources.
+  /// This needs to be called only for local resource changes since SpillOver is anyway invoked
+  /// at every heartbeat.
+  ///
+  /// \param cluster_resources: a set of cluster resources containing resource and load
+  /// information for some subset of the cluster. For all client IDs in the returned
+  /// placement map, the corresponding SchedulingResources::resources_load_ is
+  /// incremented by the aggregate resource demand of the tasks assigned to it.
+  /// \return Scheduling decision, mapping tasks to raylets for placement.
+  std::vector<TaskID> LocalResourcesChanged(SchedulingResources &local_scheduling_resources) const;
+
   /// \brief SchedulingPolicy destructor.
   virtual ~SchedulingPolicy();
 

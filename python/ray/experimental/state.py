@@ -13,6 +13,7 @@ from ray.function_manager import FunctionDescriptor
 import ray.gcs_utils
 
 from ray.ray_constants import ID_SIZE
+from ray.core.generated.EntryType import EntryType
 from ray.utils import (decode, binary_to_object_id, binary_to_hex,
                        hex_to_binary)
 
@@ -57,26 +58,47 @@ def parse_client_table(redis_client):
         # If this client is being removed, then it must
         # have previously been inserted, and
         # it cannot have previously been removed.
-        if not client.IsInsertion():
+        if client.EntryType() == EntryType.DELETION:
             assert client_id in node_info, "Client removed not found!"
-            assert node_info[client_id]["IsInsertion"], (
+            assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
                 "Unexpected duplicate removal of client.")
-        else:
-            ordered_client_ids.append(client_id)
+            node_info[client_id]["EntryType"] = client.EntryType()  # Keep the entry type up to date
 
-        node_info[client_id] = {
-            "ClientID": client_id,
-            "IsInsertion": client.IsInsertion(),
-            "NodeManagerAddress": decode(
-                client.NodeManagerAddress(), allow_none=True),
-            "NodeManagerPort": client.NodeManagerPort(),
-            "ObjectManagerPort": client.ObjectManagerPort(),
-            "ObjectStoreSocketName": decode(
-                client.ObjectStoreSocketName(), allow_none=True),
-            "RayletSocketName": decode(
-                client.RayletSocketName(), allow_none=True),
-            "Resources": resources
-        }
+        elif client.EntryType() == EntryType.RES_CREATEUPDATE:
+            assert client_id in node_info, "Client not found!"
+            assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
+                "Unexpected removal of client before resource updation.")
+            res_map = node_info[client_id]["Resources"]
+            for res in resources:
+                res_map[res] = resources[res]
+            node_info[client_id]["Resources"] = res_map
+            node_info[client_id]["EntryType"] = client.EntryType()  # Keep the entry type up to date
+
+        elif client.EntryType() == EntryType.RES_DELETE:
+            assert client_id in node_info, "Client not found!"
+            assert node_info[client_id]["EntryType"]!=EntryType.DELETION, (
+                "Unexpected removal of client before resource deletion.")
+            res_map = node_info[client_id]["Resources"]
+            for res in resources:
+                res_map.pop(res, None)
+            node_info[client_id]["Resources"] = res_map
+            node_info[client_id]["EntryType"] = client.EntryType()  # Keep the entry type up to date
+
+        elif client.EntryType() == EntryType.INSERTION:
+            ordered_client_ids.append(client_id)
+            node_info[client_id] = {
+                "ClientID": client_id,
+                "EntryType": client.EntryType(),
+                "NodeManagerAddress": decode(
+                    client.NodeManagerAddress(), allow_none=True),
+                "NodeManagerPort": client.NodeManagerPort(),
+                "ObjectManagerPort": client.ObjectManagerPort(),
+                "ObjectStoreSocketName": decode(
+                    client.ObjectStoreSocketName(), allow_none=True),
+                "RayletSocketName": decode(
+                    client.RayletSocketName(), allow_none=True),
+                "Resources": resources
+            }
     # NOTE: We return the list comprehension below instead of simply doing
     # 'list(node_info.values())' in order to have the nodes appear in the order
     # that they joined the cluster. Python dictionaries do not preserve
@@ -764,18 +786,17 @@ class GlobalState(object):
         resources = defaultdict(int)
         clients = self.client_table()
         for client in clients:
-            # Only count resources from live clients.
-            if client["IsInsertion"]:
+            # Only count resources from latest entries of live clients.
+            if client["EntryType"] != EntryType.DELETION:
                 for key, value in client["Resources"].items():
                     resources[key] += value
-
         return dict(resources)
 
     def _live_client_ids(self):
         """Returns a set of client IDs corresponding to clients still alive."""
         return {
             client["ClientID"]
-            for client in self.client_table() if client["IsInsertion"]
+            for client in self.client_table() if (client["EntryType"] != EntryType.DELETION)
         }
 
     def available_resources(self):

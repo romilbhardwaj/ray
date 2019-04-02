@@ -370,7 +370,7 @@ void ClientTable::RegisterClientAddedCallback(const ClientTableCallback &callbac
   client_added_callback_ = callback;
   // Call the callback for any added clients that are cached.
   for (const auto &entry : client_cache_) {
-    if (!entry.first.is_nil() && entry.second.is_insertion) {
+    if (!entry.first.is_nil() && (entry.second.entry_type == EntryType::INSERTION)) {
       client_added_callback_(client_, entry.first, entry.second);
     }
   }
@@ -380,8 +380,29 @@ void ClientTable::RegisterClientRemovedCallback(const ClientTableCallback &callb
   client_removed_callback_ = callback;
   // Call the callback for any removed clients that are cached.
   for (const auto &entry : client_cache_) {
-    if (!entry.first.is_nil() && !entry.second.is_insertion) {
+    if (!entry.first.is_nil() && (entry.second.entry_type == EntryType::DELETION)) {
       client_removed_callback_(client_, entry.first, entry.second);
+    }
+  }
+}
+
+
+void ClientTable::RegisterResourceCreateUpdatedCallback(const ClientTableCallback &callback) {
+  resource_createupdated_callback_ = callback;
+  // Call the callback for any clients that are cached.
+  for (const auto &entry : client_cache_) {
+    if (!entry.first.is_nil() && (entry.second.entry_type == EntryType::RES_DELETE)) {
+      resource_createupdated_callback_(client_, entry.first, entry.second);
+    }
+  }
+}
+
+void ClientTable::RegisterResourceDeletedCallback(const ClientTableCallback &callback) {
+  resource_deleted_callback_ = callback;
+  // Call the callback for any clients that are cached.
+  for (const auto &entry : client_cache_) {
+    if (!entry.first.is_nil() && (entry.second.entry_type == EntryType::RES_DELETE)) {
+      resource_deleted_callback_(client_, entry.first, entry.second);
     }
   }
 }
@@ -392,44 +413,122 @@ void ClientTable::HandleNotification(AsyncGcsClient *client,
   // It's possible to get duplicate notifications from the client table, so
   // check whether this notification is new.
   auto entry = client_cache_.find(client_id);
-  bool is_new;
+  bool is_notif_new;
+  bool is_res_modified;
   if (entry == client_cache_.end()) {
     // If the entry is not in the cache, then the notification is new.
-    is_new = true;
+    is_notif_new = true;
+    is_res_modified = false;
   } else {
     // If the entry is in the cache, then the notification is new if the client
-    // was alive and is now dead.
-    bool was_inserted = entry->second.is_insertion;
-    bool is_deleted = !data.is_insertion;
-    is_new = (was_inserted && is_deleted);
+    // was alive and is now dead or resources have been updated.
+    bool was_not_deleted = (entry->second.entry_type != EntryType::DELETION);
+    bool is_deleted = (data.entry_type == EntryType::DELETION);
+    is_notif_new = (was_not_deleted && is_deleted);
+    // If the entry was modified, use a flag to ensure ClientAdded callback is still called
+    is_res_modified = was_not_deleted && ((data.entry_type == EntryType::RES_CREATEUPDATE) || (data.entry_type == EntryType::RES_DELETE));
     // Once a client with a given ID has been removed, it should never be added
     // again. If the entry was in the cache and the client was deleted, check
     // that this new notification is not an insertion.
-    if (!entry->second.is_insertion) {
-      RAY_CHECK(!data.is_insertion)
+    if (entry->second.entry_type == EntryType::DELETION) {
+      RAY_CHECK((data.entry_type == EntryType::DELETION))
           << "Notification for addition of a client that was already removed:"
           << client_id;
     }
   }
 
   // Add the notification to our cache. Notifications are idempotent.
-  client_cache_[client_id] = data;
+  // If it is a new client or a client removal, add as is
+  if ((data.entry_type == EntryType::INSERTION) || (data.entry_type == EntryType::DELETION)){
+    RAY_LOG(DEBUG) << "[ClientTableNotification] ClientTable Insertion/Deletion notification for client id "
+        << client_id
+        << ". EntryType: " << int(data.entry_type)
+        << ". Setting the client cache to data.";
+    client_cache_[client_id] = data;
+  }
+
+  // If the entry is resource creation or updation
+  else if (data.entry_type == EntryType::RES_CREATEUPDATE){
+    RAY_LOG(DEBUG) << "[ClientTableNotification] ClientTable RES_CREATEUPDATE notification for client id "
+                   << client_id
+                   << ". EntryType: " << int(data.entry_type)
+                   << ". Updating the client cache with the delta from the log.";
+
+    ClientTableDataT& cache_data = client_cache_[client_id];
+    // Iterate over all resources in the new create/update notification
+    for(std::vector<int>::size_type i = 0; i != data.resources_total_label.size(); i++) {
+      auto const &resource_name = data.resources_total_label[i];
+      auto const &capacity = data.resources_total_capacity[i];
+
+      // If resource exists in the ClientTableData, update it, else create it
+      auto existing_resource_label = std::find(cache_data.resources_total_label.begin(), cache_data.resources_total_label.end(), resource_name);
+      if ( existing_resource_label != cache_data.resources_total_label.end()){
+        // Resource already exists, update capacity
+         auto index = std::distance(cache_data.resources_total_label.begin(), existing_resource_label);
+         cache_data.resources_total_capacity[index] = capacity;
+      }
+      else{
+        // Resource does not exist, create resource and add capacity.
+        cache_data.resources_total_label.push_back(resource_name);
+        cache_data.resources_total_capacity.push_back(capacity);
+      }
+    }
+  }
+
+  // If the entry is resource deletion
+    else if (data.entry_type == EntryType::RES_DELETE){
+      RAY_LOG(DEBUG) << "[ClientTableNotification] ClientTable RES_DELETE notification for client id "
+                     << client_id
+                     << ". EntryType: " << int(data.entry_type)
+                     << ". Updating the client cache with the delta from the log.";
+      ClientTableDataT& cache_data = client_cache_[client_id];
+
+      // Iterate over all resources in the delete notification
+      for(std::vector<int>::size_type i = 0; i != data.resources_total_label.size(); i++) {
+        auto const &resource_name = data.resources_total_label[i];
+
+        // If resource exists in the ClientTableData, delete it
+        auto existing_resource_label = std::find(cache_data.resources_total_label.begin(), cache_data.resources_total_label.end(), resource_name);
+        if ( existing_resource_label != cache_data.resources_total_label.end()){
+          // Resource exists, delete
+          auto index = std::distance(cache_data.resources_total_label.begin(), existing_resource_label);
+          cache_data.resources_total_label.erase(cache_data.resources_total_label.begin()+index);
+          cache_data.resources_total_capacity.erase(cache_data.resources_total_capacity.begin()+index);
+        }
+        // If Resource does not exist, do nothing
+      }
+    }
+
+  ClientTableDataT& cache_data = client_cache_[client_id];
 
   // If the notification is new, call any registered callbacks.
-  if (is_new) {
-    if (data.is_insertion) {
+  if (is_notif_new || is_res_modified) {
+    if (data.entry_type == EntryType::INSERTION) {
       if (client_added_callback_ != nullptr) {
-        client_added_callback_(client, client_id, data);
+        client_added_callback_(client, client_id, cache_data);
       }
       RAY_CHECK(removed_clients_.find(client_id) == removed_clients_.end());
-    } else {
+    }
+    else if (data.entry_type == EntryType::DELETION) {
       // NOTE(swang): The client should be added to this data structure before
       // the callback gets called, in case the callback depends on the data
       // structure getting updated.
       removed_clients_.insert(client_id);
       if (client_removed_callback_ != nullptr) {
-        client_removed_callback_(client, client_id, data);
+        client_removed_callback_(client, client_id, cache_data);
       }
+    }
+    else if (data.entry_type == EntryType::RES_CREATEUPDATE) {
+      if (resource_createupdated_callback_ != nullptr) {
+        resource_createupdated_callback_(client, client_id, cache_data);
+      }
+      RAY_CHECK(removed_clients_.find(client_id) == removed_clients_.end());
+    }
+    else if (data.entry_type == EntryType::RES_DELETE) {
+      if (resource_deleted_callback_ != nullptr) {
+        resource_deleted_callback_(client, client_id, cache_data);
+      }
+      RAY_CHECK(removed_clients_.find(client_id) == removed_clients_.end());
     }
   }
 }
@@ -456,7 +555,7 @@ Status ClientTable::Connect(const ClientTableDataT &local_client) {
 
   // Construct the data to add to the client table.
   auto data = std::make_shared<ClientTableDataT>(local_client_);
-  data->is_insertion = true;
+  data->entry_type = EntryType::INSERTION;
   // Callback to handle our own successful connection once we've added
   // ourselves.
   auto add_callback = [this](AsyncGcsClient *client, const UniqueID &log_key,
@@ -474,7 +573,7 @@ Status ClientTable::Connect(const ClientTableDataT &local_client) {
       for (auto &notification : notifications) {
         // This is temporary fix for Issue 4140 to avoid connect to dead nodes.
         // TODO(yuhguo): remove this temporary fix after GCS entry is removable.
-        if (notification.is_insertion) {
+        if (notification.entry_type != EntryType::DELETION) {
           connected_nodes.emplace(notification.client_id, notification);
         } else {
           auto iter = connected_nodes.find(notification.client_id);
@@ -505,9 +604,9 @@ Status ClientTable::Connect(const ClientTableDataT &local_client) {
 
 Status ClientTable::Disconnect(const DisconnectCallback &callback) {
   auto data = std::make_shared<ClientTableDataT>(local_client_);
-  data->is_insertion = false;
+  data->entry_type = EntryType::DELETION;
   auto add_callback = [this, callback](AsyncGcsClient *client, const ClientID &id,
-                                       const ClientTableDataT &data) {
+                             const ClientTableDataT &data) {
     HandleConnected(client, data);
     RAY_CHECK_OK(CancelNotifications(JobID::nil(), client_log_key_, id));
     if (callback != nullptr) {
@@ -523,7 +622,7 @@ Status ClientTable::Disconnect(const DisconnectCallback &callback) {
 ray::Status ClientTable::MarkDisconnected(const ClientID &dead_client_id) {
   auto data = std::make_shared<ClientTableDataT>();
   data->client_id = dead_client_id.binary();
-  data->is_insertion = false;
+  data->entry_type = EntryType::DELETION;
   return Append(JobID::nil(), client_log_key_, data, nullptr);
 }
 

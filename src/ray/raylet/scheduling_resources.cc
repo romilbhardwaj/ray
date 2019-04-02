@@ -396,6 +396,7 @@ const std::vector<std::pair<int64_t, double>> &ResourceIds::FractionalIds() cons
   return fractional_ids_;
 }
 
+
 bool ResourceIds::TotalQuantityIsZero() const {
   return whole_ids_.empty() && fractional_ids_.empty();
 }

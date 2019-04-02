@@ -116,6 +116,21 @@ class NodeManager {
   /// \return Void.
   void ClientRemoved(const ClientTableDataT &client_data);
 
+  /// Handler for the addition or updation of a resource in the GCS
+  /// \param client_data Data associated with the new client.
+  /// \return Void.
+  void ResourceCreateUpdated(const ClientTableDataT &client_data);
+
+  /// Handler for the deletion of a resource in the GCS
+  /// \param client_data Data associated with the new client.
+  /// \return Void.
+  void ResourceDeleted(const ClientTableDataT &client_data);
+
+  /// Evaluates the local infeasible queue to check if any tasks can be scheduled.
+  /// This is called whenever there's an update to the resources on the local client.
+  /// \return Void.
+  void TryLocalInfeasibleTaskScheduling();
+
   /// Send heartbeats to the GCS.
   void Heartbeat();
 
@@ -408,6 +423,18 @@ class NodeManager {
   ///
   /// \param task The task that just finished.
   void UpdateActorFrontier(const Task &task);
+
+  /// Process client message of CreateResourceRequest
+  /// \param client The client that sent the message.
+  /// \param message_data A pointer to the message data.
+  /// \return Void.
+  void ProcessCreateResourceRequest(const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data);
+
+  /// Process client message of DeleteResourceRequest
+  /// \param client The client that sent the message.
+  /// \param message_data A pointer to the message data.
+  /// \return Void.
+  void ProcessDeleteResourceRequest(const std::shared_ptr<LocalClientConnection> &client, const uint8_t *message_data);
 
   /// Handle the case where an actor is disconnected, determine whether this
   /// actor needs to be reconstructed and then update actor table.

@@ -150,6 +150,27 @@ std::vector<TaskID> SchedulingPolicy::SpillOver(
   return decision;
 }
 
+std::vector<TaskID> SchedulingPolicy::LocalResourcesChanged(
+    SchedulingResources &local_scheduling_resources) const {
+  // The policy decision to be returned.
+  std::vector<TaskID> decision;
+
+  ResourceSet new_load(local_scheduling_resources.GetLoadResources());
+
+  // Check if we can accommodate infeasible tasks.
+  for (const auto &task : scheduling_queue_.GetTasks(TaskState::INFEASIBLE)) {
+    const auto &spec = task.GetTaskSpecification();
+    const auto &placement_resources = spec.GetRequiredPlacementResources();
+    if (placement_resources.IsSubset(local_scheduling_resources.GetTotalResources())) {
+      decision.push_back(spec.TaskId());
+      new_load.AddResources(spec.GetRequiredResources());
+    }
+  }
+  local_scheduling_resources.SetLoadResources(std::move(new_load));
+
+  return decision;
+}
+
 SchedulingPolicy::~SchedulingPolicy() {}
 
 }  // namespace raylet

@@ -164,6 +164,20 @@ class RayletClient {
   ray::Status NotifyActorResumedFromCheckpoint(const ActorID &actor_id,
                                                const ActorCheckpointID &checkpoint_id);
 
+  /// Creates a resource with the specified capacity and client id
+  /// \param resource_name Name of the resource to be created
+  /// \param capacity Capacity of the resource
+  /// \param client_Id ClientID where the resource is to be created
+  /// \return ray::Status
+  ray::Status CreateResource(const std::string &resource_name, const double capacity, const ray::ClientID &client_Id);
+
+  /// Deletes a resource on the specified client id
+  /// \param resource_name Name of the resource to be deleted
+  /// \param client_Id ClientID where the resource is to be deleted
+  /// \return ray::Status
+  ray::Status DeleteResource(const std::string &resource_name, const ray::ClientID &client_Id);
+
+
   Language GetLanguage() const { return language_; }
 
   ClientID GetClientID() const { return client_id_; }
