@@ -630,6 +630,7 @@ class Worker(object):
 
             if resources is None:
                 raise ValueError("The resources dictionary is required.")
+
             for value in resources.values():
                 assert (isinstance(value, int) or isinstance(value, float))
                 if value < 0:
@@ -639,6 +640,9 @@ class Worker(object):
                         and not value.is_integer()):
                     raise ValueError(
                         "Resource quantities must all be whole numbers.")
+
+            # Remove any resources with zero quantity requirements
+            resources = {resource_label: resource_quantity for resource_label, resource_quantity in resources.items() if resource_quantity > 0}
 
             if placement_resources is None:
                 placement_resources = {}
@@ -1983,7 +1987,7 @@ def connect(info,
             nil_actor_counter,  # actor_counter.
             [],  # new_actor_handles.
             [],  # execution_dependencies.
-            {"CPU": 0},  # resource_map.
+            {},  # resource_map.
             {},  # placement_resource_map.
         )
 
