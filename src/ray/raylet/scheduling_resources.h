@@ -377,6 +377,6 @@ struct hash<ray::raylet::ResourceSet> {
     return seed;
   }
 };
-}
+}  // namespace std
 
 #endif  // RAY_RAYLET_SCHEDULING_RESOURCES_H
