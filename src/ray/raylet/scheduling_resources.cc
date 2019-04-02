@@ -74,7 +74,10 @@ void ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
     RAY_CHECK(resource_capacity_.count(resource_label) == 1)
         << "Attempt to acquire unknown resource: " << resource_label;
     resource_capacity_[resource_label] -= resource_capacity;
-    RAY_CHECK(resource_capacity_[resource_label] >= 0);
+    // TODO(romilb): Double precision subtraction may sometimes be less than zero by a small epsilon - need to fix.
+    RAY_CHECK(resource_capacity_[resource_label] >= 0 - std::numeric_limits<double>::epsilon())
+    << "Capacity of resource " << resource_label << " after subtraction is negative (" << resource_capacity_[resource_label] << ")."
+    << " Debug: resource_capacity_:" << ToString() << ", other: " << other.ToString();
     if (resource_capacity_[resource_label] == 0){
       resource_capacity_.erase(resource_label);
     }
@@ -229,15 +232,14 @@ void ResourceIds::Release(const ResourceIds &resource_ids) {
     if (fractional_pair_it == fractional_ids_.end()) {
       fractional_ids_.push_back(fractional_pair_to_return);
     } else {
-      RAY_CHECK(fractional_pair_it->second < 1);
       fractional_pair_it->second += fractional_pair_to_return.second;
+      // TODO(romilb): Double precision addition may sometimes exceed 1 by a small epsilon - need to fix this.
+      RAY_CHECK(fractional_pair_it->second <= 1 + std::numeric_limits<double>::epsilon());
       // If this makes the ID whole, then return it to the list of whole IDs.
-      if (fractional_pair_it->second >= 1) {
+      // TODO(romilb): Double precision addition may sometimes exceed 1 by a small epsilon - need to fix this.
+      if (fractional_pair_it->second >= 1 && fractional_pair_it->second <= 1 + std::numeric_limits<double>::epsilon()) {
         whole_ids_.push_back(resource_id);
-        fractional_pair_it->second -= 1;
-        if (fractional_pair_it->second < 1e-6) {
-          fractional_ids_.erase(fractional_pair_it);
-        }
+        fractional_ids_.erase(fractional_pair_it);
       }
     }
   }

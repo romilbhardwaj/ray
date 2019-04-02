@@ -1934,15 +1934,15 @@ def test_multiple_raylets(ray_start_cluster):
     store_names = []
     store_names += [
         client["ObjectStoreSocketName"] for client in client_table
-        if client["Resources"]["GPU"] == 0
+        if client["Resources"].get("GPU", 0) == 0
     ]
     store_names += [
         client["ObjectStoreSocketName"] for client in client_table
-        if client["Resources"]["GPU"] == 5
+        if client["Resources"].get("GPU", 0) == 5
     ]
     store_names += [
         client["ObjectStoreSocketName"] for client in client_table
-        if client["Resources"]["GPU"] == 1
+        if client["Resources"].get("GPU", 0) == 1
     ]
     assert len(store_names) == 3
 
