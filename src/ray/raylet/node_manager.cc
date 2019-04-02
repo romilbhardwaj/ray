@@ -623,6 +623,7 @@ std::unordered_map<ResourceSet, ordered_set<TaskID>> MakeTasksWithResources(
   std::unordered_map<ResourceSet, ordered_set<TaskID>> result;
   for (const auto &task : tasks) {
     auto spec = task.GetTaskSpecification();
+    RAY_LOG(DEBUG) << "[MakeTasksWithResources] Spec = " << spec.GetRequiredResources().ToString() << ", task_id " << spec.TaskId().hex();
     result[spec.GetRequiredResources()].push_back(spec.TaskId());
   }
   return result;
@@ -635,9 +636,12 @@ void NodeManager::DispatchTasks(
     const auto &task_resources = it.first;
     for (const auto &task_id : it.second) {
       const auto &task = local_queues_.GetTaskOfState(task_id, TaskState::READY);
+      RAY_LOG(DEBUG) << "[DispatchTasks] dealing with task_resources = " << task_resources.ToString() << ", task_id " << task_id.hex();
+      RAY_LOG(DEBUG) << "[DispatchTasks] local_avail" << local_available_resources_.ToResourceSet().ToString();
       if (!local_available_resources_.Contains(task_resources)) {
         // All the tasks in it.second have the same resource shape, so
         // once the first task is not feasible, we can break out of this loop
+        RAY_LOG(DEBUG) << "[DispatchTasks] task_resources no longer available." << task_resources.ToString() << ", local_avail" << local_available_resources_.ToResourceSet().ToString();
         break;
       }
       if (AssignTask(task)) {
@@ -1737,6 +1741,9 @@ void NodeManager::FinishAssignedTask(Worker &worker) {
   cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Release(
       task_resources.ToResourceSet());
   worker.ResetTaskResourceIds();
+
+  RAY_LOG(DEBUG) << "[FinishAssignedTask] task_resources " << task_resources.ToResourceSet().ToString() << ", local_available_resources_ " << local_available_resources_.ToResourceSet().ToString() << "cluster_resource_map_ "
+  << cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].DebugString();
 
   // If this was an actor or actor creation task, handle the actor's new state.
   if (task.GetTaskSpecification().IsActorCreationTask() ||
