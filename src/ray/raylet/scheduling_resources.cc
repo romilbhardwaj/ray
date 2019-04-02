@@ -13,7 +13,7 @@ ResourceSet::ResourceSet() {}
 
 ResourceSet::ResourceSet(const std::unordered_map<std::string, double> &resource_map)
     : resource_capacity_(resource_map) {
-  for (auto const &resource_pair : resource_capacity_){
+  for (auto const &resource_pair : resource_capacity_) {
     RAY_CHECK(resource_pair.second > 0);
   }
 }
@@ -74,11 +74,14 @@ void ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
     RAY_CHECK(resource_capacity_.count(resource_label) == 1)
         << "Attempt to acquire unknown resource: " << resource_label;
     resource_capacity_[resource_label] -= resource_capacity;
-    // TODO(romilb): Double precision subtraction may sometimes be less than zero by a small epsilon - need to fix.
-    RAY_CHECK(resource_capacity_[resource_label] >= 0 - std::numeric_limits<double>::epsilon())
-    << "Capacity of resource " << resource_label << " after subtraction is negative (" << resource_capacity_[resource_label] << ")."
-    << " Debug: resource_capacity_:" << ToString() << ", other: " << other.ToString();
-    if (resource_capacity_[resource_label] == 0){
+    // TODO(romilb): Double precision subtraction may sometimes be less than zero by a
+    // small epsilon - need to fix.
+    RAY_CHECK(resource_capacity_[resource_label] >=
+              0 - std::numeric_limits<double>::epsilon())
+        << "Capacity of resource " << resource_label << " after subtraction is negative ("
+        << resource_capacity_[resource_label] << ")."
+        << " Debug: resource_capacity_:" << ToString() << ", other: " << other.ToString();
+    if (resource_capacity_[resource_label] == 0) {
       resource_capacity_.erase(resource_label);
     }
   }
@@ -102,9 +105,7 @@ double ResourceSet::GetResource(const std::string &resource_name) const {
   return capacity;
 }
 
-double ResourceSet::GetNumCpus() const {
-  return GetResource(kCPU_ResourceLabel);
-}
+double ResourceSet::GetNumCpus() const { return GetResource(kCPU_ResourceLabel); }
 
 const std::string ResourceSet::ToString() const {
   std::string return_string = "";
@@ -193,7 +194,7 @@ ResourceIds ResourceIds::Acquire(double resource_quantity) {
         fractional_pair.second -= resource_quantity;
 
         // Remove the fractional pair if the new capacity is 0
-        if (fractional_pair.second == 0){
+        if (fractional_pair.second == 0) {
           std::swap(fractional_pair, fractional_ids_[fractional_ids_.size() - 1]);
           fractional_ids_.pop_back();
         }
@@ -233,11 +234,14 @@ void ResourceIds::Release(const ResourceIds &resource_ids) {
       fractional_ids_.push_back(fractional_pair_to_return);
     } else {
       fractional_pair_it->second += fractional_pair_to_return.second;
-      // TODO(romilb): Double precision addition may sometimes exceed 1 by a small epsilon - need to fix this.
+      // TODO(romilb): Double precision addition may sometimes exceed 1 by a small epsilon
+      // - need to fix this.
       RAY_CHECK(fractional_pair_it->second <= 1 + std::numeric_limits<double>::epsilon());
       // If this makes the ID whole, then return it to the list of whole IDs.
-      // TODO(romilb): Double precision addition may sometimes exceed 1 by a small epsilon - need to fix this.
-      if (fractional_pair_it->second >= 1 && fractional_pair_it->second <= 1 + std::numeric_limits<double>::epsilon()) {
+      // TODO(romilb): Double precision addition may sometimes exceed 1 by a small epsilon
+      // - need to fix this.
+      if (fractional_pair_it->second >= 1 &&
+          fractional_pair_it->second <= 1 + std::numeric_limits<double>::epsilon()) {
         whole_ids_.push_back(resource_id);
         fractional_ids_.erase(fractional_pair_it);
       }
@@ -256,7 +260,6 @@ const std::vector<int64_t> &ResourceIds::WholeIds() const { return whole_ids_; }
 const std::vector<std::pair<int64_t, double>> &ResourceIds::FractionalIds() const {
   return fractional_ids_;
 }
-
 
 bool ResourceIds::TotalQuantityIsZero() const {
   return whole_ids_.empty() && fractional_ids_.empty();
@@ -334,7 +337,7 @@ ResourceIdSet ResourceIdSet::Acquire(const ResourceSet &resource_set) {
     auto it = available_resources_.find(resource_name);
     RAY_CHECK(it != available_resources_.end());
     acquired_resources[resource_name] = it->second.Acquire(resource_quantity);
-    if (it->second.TotalQuantityIsZero()){
+    if (it->second.TotalQuantityIsZero()) {
       available_resources_.erase(it);
     }
   }

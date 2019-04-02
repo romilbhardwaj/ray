@@ -1461,7 +1461,7 @@ void NodeManager::HandleTaskBlocked(const std::shared_ptr<LocalClientConnection>
       const auto required_resources = task.GetTaskSpecification().GetRequiredResources();
       double required_cpus = required_resources.GetNumCpus();
       std::unordered_map<std::string, double> cpu_resources;
-      if (required_cpus > 0){
+      if (required_cpus > 0) {
         cpu_resources[kCPU_ResourceLabel] = required_cpus;
       }
 
@@ -1469,7 +1469,7 @@ void NodeManager::HandleTaskBlocked(const std::shared_ptr<LocalClientConnection>
       auto const cpu_resource_ids = worker->ReleaseTaskCpuResources();
       local_available_resources_.Release(cpu_resource_ids);
       cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Release(
-              ResourceSet(cpu_resources));
+          ResourceSet(cpu_resources));
       worker->MarkBlocked();
 
       // Try dispatching tasks since we may have released some resources.
@@ -1514,7 +1514,7 @@ void NodeManager::HandleTaskUnblocked(
       const auto required_resources = task.GetTaskSpecification().GetRequiredResources();
       double required_cpus = required_resources.GetNumCpus();
       std::unordered_map<std::string, double> cpu_resources_map;
-      if (required_cpus > 0){
+      if (required_cpus > 0) {
         cpu_resources_map[kCPU_ResourceLabel] = required_cpus;
       }
       const ResourceSet cpu_resources(cpu_resources_map);
@@ -1528,7 +1528,7 @@ void NodeManager::HandleTaskUnblocked(
         auto const resource_ids = local_available_resources_.Acquire(cpu_resources);
         worker->AcquireTaskCpuResources(resource_ids);
         cluster_resource_map_[gcs_client_->client_table().GetLocalClientId()].Acquire(
-                cpu_resources);
+            cpu_resources);
       } else {
         // In this case, we simply don't reacquire the CPU resources for the worker.
         // The worker can keep running and when the task finishes, it will simply

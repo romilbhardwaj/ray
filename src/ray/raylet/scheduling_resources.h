@@ -72,7 +72,9 @@ class ResourceSet {
   /// \return Void.
   void AddResources(const ResourceSet &other);
 
-  /// \brief Subtract a set of resources from the current set of resources. Assumes other is a subset of the ResourceSet. Deletes any resource if the capacity after subtraction is zero.
+  /// \brief Subtract a set of resources from the current set of resources. Assumes other
+  /// is a subset of the ResourceSet. Deletes any resource if the capacity after
+  /// subtraction is zero.
   ///
   /// \param other: The resource set to subtract from the current resource set.
   /// \return Void.
@@ -81,7 +83,8 @@ class ResourceSet {
   /// Return the capacity value associated with the specified resource.
   ///
   /// \param resource_name: Resource name for which capacity is requested.
-  /// \return The capacity value associated with the specified resource, zero if resource does not exist.
+  /// \return The capacity value associated with the specified resource, zero if resource
+  /// does not exist.
   double GetResource(const std::string &resource_name) const;
 
   /// Return the number of CPUs.
