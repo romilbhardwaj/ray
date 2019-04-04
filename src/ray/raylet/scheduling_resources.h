@@ -8,6 +8,10 @@
 
 #include "ray/raylet/format/node_manager_generated.h"
 
+#define EPSILON 0.00001
+#define EQUALS_ZERO_EPSILON(X)  ((X < EPSILON) && (X>-1*EPSILON) ? true : false)
+#define EQUALS_ONE_EPSILON(X)  ((X < 1+EPSILON) && (X>1-EPSILON) ? true : false)
+
 namespace ray {
 
 namespace raylet {
