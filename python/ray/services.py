@@ -1080,8 +1080,7 @@ def start_raylet(redis_address,
 
     # Limit the number of workers that can be started in parallel by the
     # raylet. However, make sure it is at least 1.
-    num_cpus_static = static_resources[
-        "CPU"] if "CPU" in static_resources else 0
+    num_cpus_static = static_resources.get("CPU", 0)
     maximum_startup_concurrency = max(
         1, min(multiprocessing.cpu_count(), num_cpus_static))
 

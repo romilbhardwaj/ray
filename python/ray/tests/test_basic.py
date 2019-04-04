@@ -2122,7 +2122,9 @@ def test_zero_capacity_deletion_semantics(shutdown_only):
         num_cpus=2, num_gpus=1, resources={"test_resource": 1})(test)
     cluster_resources = ray.get(function.remote())
 
-    # All cluster resources should be utilized and thus cluster_resources must be empty
+    # A
+    # ll cluster resources should be utilized and
+    # cluster_resources must be empty
     assert cluster_resources == {}
 
 
