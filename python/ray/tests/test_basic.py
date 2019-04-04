@@ -763,8 +763,7 @@ def test_defining_remote_functions(shutdown_only):
 
     # Test that we can close over plain old data.
     data = [
-        np.zeros([3, 5]), (1, 2, "a"), [0.0, 1.0, 1 << 62], 1 << 60,
-        {
+        np.zeros([3, 5]), (1, 2, "a"), [0.0, 1.0, 1 << 62], 1 << 60, {
             "a": np.zeros(3)
         }
     ]
@@ -2119,11 +2118,13 @@ def test_zero_capacity_deletion_semantics(shutdown_only):
     def test():
         return ray.global_state.available_resources()
 
-    function = ray.remote(num_cpus=2, num_gpus=1, resources={"test_resource": 1})(test)
+    function = ray.remote(
+        num_cpus=2, num_gpus=1, resources={"test_resource": 1})(test)
     cluster_resources = ray.get(function.remote())
 
     # All cluster resources should be utilized and thus cluster_resources must be empty
     assert cluster_resources == {}
+
 
 @pytest.fixture
 def save_gpu_ids_shutdown_only():
