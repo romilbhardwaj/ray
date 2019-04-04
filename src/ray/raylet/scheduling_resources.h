@@ -9,14 +9,24 @@
 #include "ray/raylet/format/node_manager_generated.h"
 
 #define EPSILON 0.00001
-#define EQUALS_ZERO_EPSILON(X)  ((X < EPSILON) && (X>-1*EPSILON) ? true : false)
-#define EQUALS_ONE_EPSILON(X)  ((X < 1+EPSILON) && (X>1-EPSILON) ? true : false)
 
 namespace ray {
 
 namespace raylet {
 
 const std::string kCPU_ResourceLabel = "CPU";
+
+/// \brief Test if the quantity is within epsilon bounds of 0.
+///
+/// \param quantity: Quantity to check
+/// \return True if  -epsilon <= Quantity <= epsilon, False otherwise.
+bool EqualsZeroEpsilon(double quantity);
+
+/// \brief Test if the quantity is within epsilon bounds of 1.
+///
+/// \param quantity: Quantity to check
+/// \return True if  1 - epsilon <= Quantity <= 1 + epsilon, False otherwise.
+bool EqualsOneEpsilon(double quantity);
 
 /// \class ResourceSet
 /// \brief Encapsulates and operates on a set of resources, including CPUs,

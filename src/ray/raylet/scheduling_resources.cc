@@ -9,6 +9,20 @@ namespace ray {
 
 namespace raylet {
 
+bool EqualsZeroEpsilon(double quantity){
+  if ((quantity <= EPSILON) && (quantity >= -1*EPSILON)){
+    return true;
+  }
+  return false;
+}
+
+bool EqualsOneEpsilon(double quantity){
+  if ((quantity <= 1+EPSILON) && (quantity >= 1-EPSILON)){
+    return true;
+  }
+  return false;
+}
+
 ResourceSet::ResourceSet() {}
 
 ResourceSet::ResourceSet(const std::unordered_map<std::string, double> &resource_map)
@@ -80,7 +94,7 @@ void ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
         << "Capacity of resource " << resource_label << " after subtraction is negative ("
         << resource_capacity_[resource_label] << ")."
         << " Debug: resource_capacity_:" << ToString() << ", other: " << other.ToString();
-    if (EQUALS_ZERO_EPSILON(resource_capacity_[resource_label])) {
+    if (EqualsZeroEpsilon(resource_capacity_[resource_label])) {
       resource_capacity_.erase(resource_label);
     }
   }
@@ -96,7 +110,7 @@ void ResourceSet::AddResources(const ResourceSet &other) {
 }
 
 double ResourceSet::GetResource(const std::string &resource_name) const {
-  if (EQUALS_ZERO_EPSILON(resource_capacity_.count(resource_name))) {
+  if (EqualsZeroEpsilon(resource_capacity_.count(resource_name))) {
     return 0;
   }
   double capacity = resource_capacity_.at(resource_name);
@@ -193,7 +207,7 @@ ResourceIds ResourceIds::Acquire(double resource_quantity) {
         fractional_pair.second -= resource_quantity;
 
         // Remove the fractional pair if the new capacity is 0
-        if (EQUALS_ZERO_EPSILON(fractional_pair.second)) {
+        if (EqualsZeroEpsilon(fractional_pair.second)) {
           std::swap(fractional_pair, fractional_ids_[fractional_ids_.size() - 1]);
           fractional_ids_.pop_back();
         }
@@ -239,7 +253,7 @@ void ResourceIds::Release(const ResourceIds &resource_ids) {
       // If this makes the ID whole, then return it to the list of whole IDs.
       // TODO(romilb): Double precision addition may sometimes exceed 1 by a small epsilon
       // - need to fix this.
-      if (EQUALS_ONE_EPSILON(fractional_pair_it->second)) {
+      if (EqualsOneEpsilon(fractional_pair_it->second)) {
         whole_ids_.push_back(resource_id);
         fractional_ids_.erase(fractional_pair_it);
       }
