@@ -2113,6 +2113,18 @@ def test_many_custom_resources(shutdown_only):
     ray.get(results)
 
 
+def test_zero_capacity_deletion_semantics(shutdown_only):
+    ray.init(num_cpus=2, num_gpus=1, resources={"test_resource": 1})
+
+    def test():
+        return ray.global_state.available_resources()
+
+    function = ray.remote(num_cpus=2, num_gpus=1, resources={"test_resource": 1})(test)
+    cluster_resources = ray.get(function.remote())
+
+    # All cluster resources should be utilized and thus cluster_resources must be empty
+    assert cluster_resources == {}
+
 @pytest.fixture
 def save_gpu_ids_shutdown_only():
     # Record the curent value of this environment variable so that we can
