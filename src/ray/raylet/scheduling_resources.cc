@@ -88,7 +88,7 @@ void ResourceSet::SubtractResources(const ResourceSet &other) {
   for (const auto &resource_pair : other.GetResourceMap()) {
     const std::string &resource_label = resource_pair.first;
     const double &resource_capacity = resource_pair.second;
-    if(resource_capacity_.count(resource_label) == 1){
+    if (resource_capacity_.count(resource_label) == 1) {
       resource_capacity_[resource_label] -= resource_capacity;
       if (resource_capacity_[resource_label] < 0 + EPSILON) {
         resource_capacity_.erase(resource_label);
@@ -98,7 +98,8 @@ void ResourceSet::SubtractResources(const ResourceSet &other) {
 }
 
 void ResourceSet::SubtractResourcesStrict(const ResourceSet &other) {
-  // Subtract the resources, make sure none goes below zero and delete any if new capacity is zero.
+  // Subtract the resources, make sure none goes below zero and delete any if new capacity
+  // is zero.
   for (const auto &resource_pair : other.GetResourceMap()) {
     const std::string &resource_label = resource_pair.first;
     const double &resource_capacity = resource_pair.second;
