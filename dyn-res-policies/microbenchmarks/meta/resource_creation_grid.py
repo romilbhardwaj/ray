@@ -3,7 +3,7 @@ import logging
 import numpy as np
 import os
 
-from .resource_creation import Experiment
+from resource_creation import Experiment
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(format='%(process)d-%(levelname)s-%(message)s')
@@ -19,13 +19,13 @@ def write_data(num_nodes, num_res, data, labels, base_dir = '.'):
         f.write(",".join(labels))
 
 if __name__ == '__main__':
-    NUM_NODE_RANGE = [1, 5, 10]
-    NUM_RES_RANGE = [10, 100, 1000]
-    NUM_RUNS = 5
+    NUM_NODE_RANGE = [1, 10]
+    NUM_RES_RANGE = [10, 50, 100, 500, 1000, 5000]
+    NUM_RUNS = 3
 
     for num_nodes in NUM_NODE_RANGE:
         for num_res in NUM_RES_RANGE:
-            logger.info("Testing num nodes {}, num_tasks {}. Creating experiment object now.".format(num_nodes, num_res))
+            logger.info("******* Testing num nodes {}, num_res {}. Creating experiment object now.********".format(num_nodes, num_res))
             e = Experiment(num_nodes=num_nodes, num_res=num_res, redis_address=None, num_runs=None)
 
             create_res_data = []
@@ -42,6 +42,6 @@ if __name__ == '__main__':
             for i, label in enumerate(labels):
                 logger.info("Mean {}: {}".format(label, mean_data[i]))
 
-            write_data(num_nodes, num_res, data, labels)
+            write_data(num_nodes, num_res, create_res_data, labels, base_dir='./res_creation/')
 
             e.shutdown()
