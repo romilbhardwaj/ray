@@ -128,7 +128,7 @@ def receive(sources, timeout=None):
     # Construct the redis query.
     query = "XREAD BLOCK "
     # Multiply by 1000x since timeout is in sec and redis expects ms.
-    query += str(1000 * timeout)
+    query += str(int(1000 * timeout))
     query += " STREAMS "
     query += " ".join([task_id for task_id in task_id_to_sources])
     query += " "
