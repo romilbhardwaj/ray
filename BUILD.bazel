@@ -494,6 +494,7 @@ flatbuffer_py_library(
         "ConfigTableData.py",
         "CustomSerializerData.py",
         "DriverTableData.py",
+        "EntryType.py",
         "ErrorTableData.py",
         "ErrorType.py",
         "FunctionTableData.py",
