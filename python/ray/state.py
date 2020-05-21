@@ -863,6 +863,58 @@ class GlobalState:
 
         return dict(total_available_resources)
 
+    def available_resources_per_node(self):
+        self._check_connected()
+
+        available_resources_by_id = {}
+
+        subscribe_clients = [
+            redis_client.pubsub(ignore_subscribe_messages=True)
+            for redis_client in self.redis_clients
+        ]
+        for subscribe_client in subscribe_clients:
+            subscribe_client.subscribe(gcs_utils.XRAY_HEARTBEAT_CHANNEL)
+
+        client_ids = self._live_client_ids()
+
+        while set(available_resources_by_id.keys()) != client_ids:
+            for subscribe_client in subscribe_clients:
+                # Parse client message
+                raw_message = subscribe_client.get_message()
+                if (raw_message is None or raw_message["channel"] !=
+                    gcs_utils.XRAY_HEARTBEAT_CHANNEL):
+                    continue
+                data = raw_message["data"]
+                gcs_entries = gcs_utils.GcsEntry.FromString(data)
+                heartbeat_data = gcs_entries.entries[0]
+                message = gcs_utils.HeartbeatTableData.FromString(
+                    heartbeat_data)
+                # Calculate available resources for this client
+                num_resources = len(message.resources_available_label)
+                dynamic_resources = {}
+                for i in range(num_resources):
+                    resource_id = message.resources_available_label[i]
+                    dynamic_resources[resource_id] = (
+                        message.resources_available_capacity[i])
+
+                # Update available resources for this client
+                client_id = ray.utils.binary_to_hex(message.client_id)
+                available_resources_by_id[client_id] = dynamic_resources
+
+            # Update clients in cluster
+            client_ids = self._live_client_ids()
+
+            # Remove disconnected clients
+            for client_id in available_resources_by_id.keys():
+                if client_id not in client_ids:
+                    del available_resources_by_id[client_id]
+
+        # Close the pubsub clients to avoid leaking file descriptors.
+        for subscribe_client in subscribe_clients:
+            subscribe_client.close()
+
+        return available_resources_by_id
+
     def _error_messages(self, job_id):
         """Get the error messages for a specific driver.
 
@@ -1105,6 +1157,8 @@ def available_resources():
     """
     return state.available_resources()
 
+def available_resources_per_node():
+    return state.available_resources_per_node()
 
 def errors(all_jobs=False):
     """Get error messages from the cluster.
